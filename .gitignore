@@ -90,3 +90,4 @@ Desktop.ini
 
 
 # Local CI helper scripts (set_secrets.py uses raw API token - never commit)
+apk_build_logs/
