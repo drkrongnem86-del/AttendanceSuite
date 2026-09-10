@@ -1,0 +1,14 @@
+﻿timestamp,device_ip,user_id,user_name,status,punch,method_name,written_to_device,note
+2026-09-10 14:35:00,172.16.0.212,88888,NV 88888,1,1,Thẻ,False,old entry 2
+2026-09-10 14:48:29,172.16.0.212,88888,NV 88888,0,0,Vân tay,False,old entry 3
+2026-09-10 15:10:53,172.16.0.212,59,NV 59,3,0,Vân tay,False,May tra ACK_OK nhung KHONG ghi (records van 99218). ZK firmware khong ho tro ghi tu xa. Da luu local
+2026-09-10 15:17:12,172.16.0.212,99999,NV 99999,0,0,Vân tay,False,Ma NV 99999 chua dang ky trong may
+2026-09-10 15:27:54,172.16.0.212,421,NV 421,0,0,Vân tay,False,"Da thu 6 cach, may ACK_OK nhung KHONG ghi (records van 99218). ZK firmware that su khong cho ghi tu "
+2026-09-10 15:40:30,172.16.0.212,121212,NV 121212,0,0,Vân tay,False,Ma NV 121212 chua dang ky trong may
+2026-09-10 15:59:37,172.16.0.212,421,NV 421,0,0,Vân tay,False,"Da thu 6 cach, may ACK_OK nhung KHONG ghi (records van 99218). ZK firmware that su khong cho ghi tu "
+2026-09-10 16:05:53,172.16.0.212,421,NV 421,0,0,Vân tay,False,"Da thu 6 cach, may ACK_OK nhung KHONG ghi (records van 99222). ZK firmware that su khong cho ghi tu "
+2026-09-10 16:16:25,172.16.0.212,421,NV 421,0,0,Vân tay,False,"Da thu 6 cach, may ACK_OK nhung KHONG ghi (records van 99224). ZK firmware that su khong cho ghi tu "
+2026-09-10 16:25:53,172.16.0.212,421,NV 421,1,0,Vân tay,False,"Da thu 6 cach, may ACK_OK nhung KHONG ghi (records van 99226). ZK firmware that su khong cho ghi tu "
+2026-09-10 16:27:55,172.16.0.212,421,NV 421,1,0,Vân tay,False,"Da thu 6 cach, may ACK_OK nhung KHONG ghi (records van 99226). ZK firmware that su khong cho ghi tu "
+2026-09-10 16:53:07,172.16.0.212,421,NV 421,1,0,Vân tay,False,"Da thu 6 cach, may ACK_OK nhung KHONG ghi (records van 99231). ZK firmware that su khong cho ghi tu "
+2026-09-10 16:53:21,172.16.0.212,421,NV 421,1,1,Thẻ,False,"Da thu 6 cach, may ACK_OK nhung KHONG ghi (records van 99231). ZK firmware that su khong cho ghi tu "

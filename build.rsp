@@ -1,0 +1,4 @@
+-target:winexe
+-out:C:\Users\CCDK-M6\.mavis\sessions\mvs_a35269e1459f4fe5adf3015482c22310\workspace\AttendanceSuite.exe
+-resource:C:\Users\CCDK-M6\.mavis\sessions\mvs_a35269e1459f4fe5adf3015482c22310\workspace\AttendanceSuite_Portable.zip,Suite.Payload
+C:\Users\CCDK-M6\.mavis\sessions\mvs_a35269e1459f4fe5adf3015482c22310\workspace\build_exe.cs
