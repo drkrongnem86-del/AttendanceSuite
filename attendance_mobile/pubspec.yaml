@@ -42,6 +42,14 @@ dependencies:
   # For persisting server IP and settings
   shared_preferences: ^2.2.2
 
+# Pin shared_preferences_android to >= 2.4.28
+# Older versions (e.g. 2.4.23) use deprecated Kotlin Gradle Plugin API
+# (compilerOptions {}) that fails with Kotlin 1.9.0+ and AGP 8.1.1+:
+#   'void org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
+#    .compilerOptions(kotlin.jvm.functions.Function1)'
+dependency_overrides:
+  shared_preferences_android: ^2.4.28
+
   # For showing date/time pickers
   intl: ^0.19.0
 
