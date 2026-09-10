@@ -80,15 +80,52 @@ Sẽ in URL `https://xxx.trycloudflare.com` - mở từ bất kỳ đâu.
 
 ### 4. Build APK Android
 
+**Cách 1 — GitHub Actions (khuyến nghị, nhanh)**:
+
+Push code lên GitHub → workflow `.github/workflows/build-apk.yml` tự động build APK arm64.
+
+- Push lên `main` → APK ở tab **Actions** → **build-apk** → artifact `attendance-mobile-arm64-X.Y.Z+N`
+- Push tag `v1.3.3` → tự động tạo GitHub Release với APK đính kèm
+
+**Cách 2 — Local** (cần JDK 17 + Android SDK):
+
 ```powershell
 cd attendance_mobile
 flutter pub get
-flutter build apk --release
+flutter build apk --release --target-platform=android-arm64 --split-per-abi
 ```
 
-APK ở: `attendance_mobile/build/app/outputs/flutter-apk/app-release.apk`
+APK ở: `attendance_mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`
 
-Lưu ý: Cần JDK 17+ + Android SDK. Nếu build fail vì network chậm, thêm Aliyun mirror vào `android/settings.gradle` + `android/build.gradle`.
+Lưu ý: Build local thường fail ở `kotlin-compiler-embeddable-1.8.22.jar` (96MB) do mạng đến `repo.maven.apache.org` chậm. Workflow GitHub dùng Aliyun mirror nên build nhanh & ổn định.
+
+---
+
+## 🤖 GitHub Actions
+
+Workflow `.github/workflows/build-apk.yml` tự động build APK arm64.
+
+**Trigger**:
+- Push lên `main` → build + upload artifact
+- Push tag `v*` (vd `v1.3.3`) → build + tạo GitHub Release
+- Manual: tab Actions → Run workflow
+
+**Cần setup 2 GitHub Secrets** (1 lần):
+- Vào `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
+- `ANDROID_KEYSTORE_B64`: base64 của `android/app/release.keystore`
+- `ANDROID_KEY_PROPS_B64`: base64 của `android/key.properties`
+
+Generate secrets trên máy local:
+```powershell
+$ks = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes("attendance_mobile\android\app\release.keystore"))
+$kprops = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes((Get-Content "attendance_mobile\android\key.properties" -Raw)))
+Write-Host "KEYSTORE_B64=$ks"
+Write-Host "KEY_PROPS_B64=$kprops"
+```
+
+Nếu chưa setup secrets → workflow vẫn chạy nhưng APK sẽ được sign bằng debug keystore (không cài đè được lên release-signed cũ). Workflow in `::warning::` thay vì fail.
+
+**Lint workflow** (`.github/workflows/lint.yml`): chạy Python compile-check + Flutter analyze mỗi PR. Nhanh (~3 min) để gate merge.
 
 ---
 
@@ -138,6 +175,13 @@ AttendanceSuite/
     │   │   └── release.keystore      # Keystore cho release APK ← MỚI
     │   └── key.properties             # ← MỚI
     └── pubspec.yaml                   # Version 1.3.2+6
+
+.github/
+├── workflows/
+│   ├── build-apk.yml                 # Build APK arm64 ← MỚI
+│   └── lint.yml                      # Python + Flutter lint ← MỚI
+└── scripts/
+    └── init.gradle                   # Aliyun mirror cho Gradle ← MỚI
 ```
 
 ---

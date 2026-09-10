@@ -1,0 +1,43 @@
+// Force ALL Gradle resolutions through Aliyun mirror.
+// Critical for AGP build where kotlin-compiler-embeddable (96MB) gets stuck
+// downloading from repo.maven.apache.org on slow networks.
+allprojects {
+    buildscript {
+        repositories {
+            mavenLocal()
+            maven { url 'https://maven.aliyun.com/repository/public' }
+            maven { url 'https://maven.aliyun.com/repository/google' }
+            maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+            maven { url 'https://maven.aliyun.com/repository/jcenter' }
+            maven { url 'https://maven.aliyun.com/repository/central' }
+            google()
+            mavenCentral()
+        }
+    }
+    repositories {
+        mavenLocal()
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://maven.aliyun.com/repository/jcenter' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        google()
+        mavenCentral()
+    }
+}
+
+settingsEvaluated { settings ->
+    settings.pluginManagement {
+        repositories {
+            mavenLocal()
+            maven { url 'https://maven.aliyun.com/repository/public' }
+            maven { url 'https://maven.aliyun.com/repository/google' }
+            maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+            maven { url 'https://maven.aliyun.com/repository/jcenter' }
+            maven { url 'https://maven.aliyun.com/repository/central' }
+            gradlePluginPortal()
+            google()
+            mavenCentral()
+        }
+    }
+}

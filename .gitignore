@@ -83,3 +83,7 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# GitHub - local secrets file (NEVER commit real secrets)
+.github/SECRETS_NEEDED.txt
+.github/workflows/*.local.yml
