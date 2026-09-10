@@ -163,7 +163,10 @@ jobs:
             echo "::notice::Building DEBUG per workflow_dispatch override"
             flutter build apk --debug --target-platform=android-arm64
           else
-            flutter build apk --release --target-platform=android-arm64 --split-per-abi
+            # NOTE: do not pass --split-per-abi here - it conflicts with the
+            # ndk.abiFilters 'arm64-v8a' configured in app/build.gradle.
+            # Single-ABI build is exactly what we want.
+            flutter build apk --release --target-platform=android-arm64
           fi
 
       - name: Locate APK
