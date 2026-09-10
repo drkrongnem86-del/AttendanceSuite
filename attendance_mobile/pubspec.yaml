@@ -42,13 +42,13 @@ dependencies:
   # For persisting server IP and settings
   shared_preferences: ^2.2.2
 
-# Pin shared_preferences_android to >= 2.4.28
-# Older versions (e.g. 2.4.23) use deprecated Kotlin Gradle Plugin API
-# (compilerOptions {}) that fails with Kotlin 1.9.0+ and AGP 8.1.1+:
-#   'void org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
-#    .compilerOptions(kotlin.jvm.functions.Function1)'
+# Pin shared_preferences_android to 2.4.7 (last version with Dart SDK ^3.5.0 compatibility
+# + uses Groovy build.gradle with old `kotlinOptions` API that works with Kotlin 1.9.x).
+# 2.4.13+ requires Dart SDK ^3.7.0+ (our project pins Dart ^3.5.4) and uses Kotlin DSL
+# `kotlin { compilerOptions { jvmTarget = ... } }` that needs kotlin-android plugin properly
+# applied to the plugin's own build script (broken in 2.4.28).
 dependency_overrides:
-  shared_preferences_android: ^2.4.28
+  shared_preferences_android: 2.4.7
 
   # For showing date/time pickers
   intl: ^0.19.0
