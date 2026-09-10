@@ -41,7 +41,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: actions/setup-android-sdk@v3
+      - uses: android-actions/setup-android@v3
       - uses: actions/cache@v4
         with:
           path: |
