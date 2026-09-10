@@ -46,11 +46,16 @@ jobs:
           cache: gradle
 
       - name: Setup Gradle init script (Aliyun mirror)
+        # init.gradle is intentionally a no-op now. Aliyun mirrors are configured
+        # directly in android/settings.gradle and android/build.gradle. Earlier
+        # versions of this file injected extra `maven { url ... }` blocks via
+        # `allprojects { repositories { ... } }` which conflicts with Gradle 8.3
+        # PREFER_SETTINGS mode (error: repository 'maven' was added by settings).
         run: |
           mkdir -p ~/.gradle
           cp .github/scripts/init.gradle ~/.gradle/init.gradle
-          echo "init.gradle deployed:"
-          ls -la ~/.gradle/init.gradle
+          echo "init.gradle deployed (no-op):"
+          cat ~/.gradle/init.gradle
 
       - name: Cache Pub
         uses: actions/cache@v4
