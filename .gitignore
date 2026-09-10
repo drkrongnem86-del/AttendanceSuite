@@ -87,3 +87,6 @@ Desktop.ini
 # GitHub - local secrets file (NEVER commit real secrets)
 .github/SECRETS_NEEDED.txt
 .github/workflows/*.local.yml
+
+
+# Local CI helper scripts (set_secrets.py uses raw API token - never commit)
