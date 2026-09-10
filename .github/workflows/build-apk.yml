@@ -159,14 +159,17 @@ jobs:
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true
         run: |
+          # --android-skip-build-dependency-validation bypasses Flutter's
+          # warnings about AGP < 8.6.0 and Kotlin < 2.1.0 (the warnings
+          # are not blockers, but they make the build fail in strict mode).
           if [ "${{ github.event.inputs.debug_build }}" = "true" ]; then
             echo "::notice::Building DEBUG per workflow_dispatch override"
-            flutter build apk --debug --target-platform=android-arm64
+            flutter build apk --debug --target-platform=android-arm64 --android-skip-build-dependency-validation
           else
             # NOTE: do not pass --split-per-abi here - it conflicts with the
             # ndk.abiFilters 'arm64-v8a' configured in app/build.gradle.
             # Single-ABI build is exactly what we want.
-            flutter build apk --release --target-platform=android-arm64
+            flutter build apk --release --target-platform=android-arm64 --android-skip-build-dependency-validation
           fi
 
       - name: Locate APK
