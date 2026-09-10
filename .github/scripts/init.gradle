@@ -1,10 +1,14 @@
 // Force ALL Gradle resolutions through Aliyun mirror.
 // Critical for AGP build where kotlin-compiler-embeddable (96MB) gets stuck
 // downloading from repo.maven.apache.org on slow networks.
+//
+// NOTE: We only modify project-level buildscript + repositories here.
+// Do NOT add mavenLocal() in settingsEvaluated -> pluginManagement because
+// Flutter's settings.gradle uses pluginManagement { repositories {...} } which
+// conflicts with FAIL_ON_PROJECT_REPOS mode.
 allprojects {
     buildscript {
         repositories {
-            mavenLocal()
             maven { url 'https://maven.aliyun.com/repository/public' }
             maven { url 'https://maven.aliyun.com/repository/google' }
             maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
@@ -15,7 +19,6 @@ allprojects {
         }
     }
     repositories {
-        mavenLocal()
         maven { url 'https://maven.aliyun.com/repository/public' }
         maven { url 'https://maven.aliyun.com/repository/google' }
         maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
@@ -23,21 +26,5 @@ allprojects {
         maven { url 'https://maven.aliyun.com/repository/central' }
         google()
         mavenCentral()
-    }
-}
-
-settingsEvaluated { settings ->
-    settings.pluginManagement {
-        repositories {
-            mavenLocal()
-            maven { url 'https://maven.aliyun.com/repository/public' }
-            maven { url 'https://maven.aliyun.com/repository/google' }
-            maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-            maven { url 'https://maven.aliyun.com/repository/jcenter' }
-            maven { url 'https://maven.aliyun.com/repository/central' }
-            gradlePluginPortal()
-            google()
-            mavenCentral()
-        }
     }
 }
