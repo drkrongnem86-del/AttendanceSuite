@@ -1,0 +1,59 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-lint:
+    name: Python syntax check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python compile check
+        run: |
+          python3 -m py_compile attendance_web.py remote_punch_service.py punch_simulator.py zk_recon.py secutime_exploit.py adms_mini.py 2>&1 | head -50 || true
+          echo "---"
+          for f in attendance_web.py remote_punch_service.py punch_simulator.py zk_recon.py secutime_exploit.py adms_mini.py; do
+            python3 -c "import ast; ast.parse(open('$f', encoding='utf-8').read())" && echo "OK: $f" || echo "FAIL: $f"
+          done
+
+  flutter-analyze:
+    name: Flutter analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FLUTTER_VERSION: 3.41.7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            attendance_mobile/.dart_tool
+          key: pub-${{ hashFiles('attendance_mobile/pubspec.lock') }}
+      - name: Setup
+        working-directory: attendance_mobile
+        run: |
+          echo "flutter.sdk=$ANDROID_SDK_ROOT/.." >> android/local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
+          flutter pub get
+      - name: Analyze
+        working-directory: attendance_mobile
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true

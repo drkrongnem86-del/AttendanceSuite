@@ -1,0 +1,247 @@
+name: Build APK (arm64)
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      debug_build:
+        description: 'Build debug instead of release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # for creating GitHub Release on tag push
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build arm64 APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      # Flutter 3.41.7 matches user's local install
+      FLUTTER_VERSION: 3.41.7
+      JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Setup Gradle init script (Aliyun mirror)
+        # init.gradle is intentionally a no-op now. Aliyun mirrors are configured
+        # directly in android/settings.gradle and android/build.gradle. Earlier
+        # versions of this file injected extra `maven { url ... }` blocks via
+        # `allprojects { repositories { ... } }` which conflicts with Gradle 8.3
+        # PREFER_SETTINGS mode (error: repository 'maven' was added by settings).
+        run: |
+          mkdir -p ~/.gradle
+          cp .github/scripts/init.gradle ~/.gradle/init.gradle
+          echo "init.gradle deployed (no-op):"
+          cat ~/.gradle/init.gradle
+
+      - name: Cache Pub
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            attendance_mobile/.dart_tool
+          key: ${{ runner.os }}-pub-${{ hashFiles('attendance_mobile/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('attendance_mobile/android/gradle/wrapper/gradle-wrapper.properties', 'attendance_mobile/android/build.gradle', 'attendance_mobile/android/settings.gradle') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+          cache-key: "flutter-${{ env.FLUTTER_VERSION }}-x64"
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Accept Android licenses
+        run: yes | flutter doctor --android-licenses
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '11076708'
+          accept-android-sdk-licenses: true
+
+      - name: Write local.properties
+        run: |
+          echo "flutter.sdk=$ANDROID_SDK_ROOT/.." >> attendance_mobile/android/local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> attendance_mobile/android/local.properties
+          cat attendance_mobile/android/local.properties
+
+      - name: Decode keystore from secret
+        if: github.event.inputs.debug_build != 'true' && !startsWith(github.ref, 'refs/tags/')
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEY_PROPS_B64: ${{ secrets.ANDROID_KEY_PROPS_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEY_PROPS_B64" ]; then
+            echo "::warning::ANDROID_KEYSTORE_B64 or ANDROID_KEY_PROPS_B64 not set; falling back to debug-signed APK"
+            exit 0
+          fi
+          mkdir -p attendance_mobile/android/app
+          echo "$KEYSTORE_B64" | base64 -d > attendance_mobile/android/app/release.keystore
+          echo "$KEY_PROPS_B64" | base64 -d > attendance_mobile/android/key.properties
+          chmod 600 attendance_mobile/android/app/release.keystore
+          echo "Keystore + key.properties restored from secrets"
+          ls -la attendance_mobile/android/app/release.keystore
+          cat attendance_mobile/android/key.properties
+
+      - name: Decode keystore (tag build - required)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEY_PROPS_B64: ${{ secrets.ANDROID_KEY_PROPS_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEY_PROPS_B64" ]; then
+            echo "::error::Tag builds require ANDROID_KEYSTORE_B64 and ANDROID_KEY_PROPS_B64"
+            exit 1
+          fi
+          mkdir -p attendance_mobile/android/app
+          echo "$KEYSTORE_B64" | base64 -d > attendance_mobile/android/app/release.keystore
+          echo "$KEY_PROPS_B64" | base64 -d > attendance_mobile/android/key.properties
+          chmod 600 attendance_mobile/android/app/release.keystore
+
+      - name: Get version
+        id: version
+        working-directory: attendance_mobile
+        run: |
+          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: //;s/+.*//')
+          VERSION_CODE=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
+          echo "name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "::notice::Building v$VERSION_NAME+$VERSION_CODE"
+
+      - name: Flutter pub get
+        working-directory: attendance_mobile
+        run: flutter pub get
+
+      - name: Flutter analyze
+        working-directory: attendance_mobile
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
+
+      - name: Build APK release (arm64)
+        working-directory: attendance_mobile
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true
+        run: |
+          # --android-skip-build-dependency-validation bypasses Flutter's
+          # warnings about AGP < 8.6.0 and Kotlin < 2.1.0 (the warnings
+          # are not blockers, but they make the build fail in strict mode).
+          if [ "${{ github.event.inputs.debug_build }}" = "true" ]; then
+            echo "::notice::Building DEBUG per workflow_dispatch override"
+            flutter build apk --debug --target-platform=android-arm64 --android-skip-build-dependency-validation
+          else
+            # NOTE: do not pass --split-per-abi here - it conflicts with the
+            # ndk.abiFilters 'arm64-v8a' configured in app/build.gradle.
+            # Single-ABI build is exactly what we want.
+            flutter build apk --release --target-platform=android-arm64 --android-skip-build-dependency-validation
+          fi
+
+      - name: Locate APK
+        id: locate
+        working-directory: attendance_mobile
+        run: |
+          echo "=== Build outputs ==="
+          find build/app/outputs -name '*.apk' -type f
+          echo "---"
+          APK_DIR=build/app/outputs/flutter-apk
+          if [ -d "$APK_DIR" ]; then
+            for f in "$APK_DIR"/*.apk; do
+              echo "APK: $f"
+              sha256sum "$f" | tee -a apk-sha256.txt
+            done
+          fi
+
+      - name: Compute cert SHA-256
+        if: github.event.inputs.debug_build != 'true'
+        id: cert
+        working-directory: attendance_mobile
+        run: |
+          if [ -f android/app/release.keystore ]; then
+            KEYTOOL="$JAVA_HOME/bin/keytool"
+            SHA=$($KEYTOOL -list -v -keystore android/app/release.keystore \
+                   -storepass bvdk@2026 -alias attendance 2>/dev/null \
+                   | grep -A1 'SHA256:' | tail -1 | awk '{print $1}')
+            echo "sha256=$SHA" >> $GITHUB_OUTPUT
+            echo "::notice::Signing cert SHA-256: $SHA"
+          else
+            echo "sha256=DEBUG_KEYSTORE" >> $GITHUB_OUTPUT
+            echo "::warning::Release keystore not present, built with debug key"
+          fi
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: attendance-mobile-arm64-${{ steps.version.outputs.name }}+${{ steps.version.outputs.code }}
+          path: |
+            attendance_mobile/build/app/outputs/flutter-apk/*.apk
+            attendance_mobile/apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: 'AttendanceSuite v${{ steps.version.outputs.name }}'
+          generate_release_notes: true
+          files: |
+            attendance_mobile/build/app/outputs/flutter-apk/*.apk
+            attendance_mobile/apk-sha256.txt
+          body: |
+            ## AttendanceSuite v${{ steps.version.outputs.name }} (${{ steps.version.outputs.code }})
+
+            **APK SHA-256**:
+            ```
+            ${{ steps.cert.outputs.sha256 }}
+            ```
+
+            **Architecture**: arm64-v8a only (~30% smaller than universal)
+
+            **Build**: GitHub Actions (commit ${{ github.sha }})
+
+            ---
+
+            ### Quick install
+            ```bash
+            adb install -r app-arm64-v8a-release.apk
+            ```
+
+            ### What changed
+            See [CHANGELOG](${{ github.server_url }}/${{ github.repository }}/blob/main/CHANGELOG.md) for details.

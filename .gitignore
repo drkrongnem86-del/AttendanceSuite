@@ -1,0 +1,99 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+env/
+ENV/
+
+# Logs
+*.log
+service_test.log
+svc.out.txt
+svc.err.txt
+web.out.txt
+web.err.txt
+apk_build*.log
+
+# Local data (runtime)
+pending_punches.csv
+synced_punches.csv
+failed_punches.csv
+manual_punches.csv
+sync_state.json
+scan_result.txt
+
+# APK binaries (use GitHub Releases for distribution)
+/apk/
+/dist/
+/build/
+
+# Build outputs (mobile/android)
+.gradle/
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/local.properties
+android/key.properties
+android/app/release.keystore
+android/app/*.jks
+android/app/*.keystore
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.iml
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Temporary
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# GitHub - local secrets file (NEVER commit real secrets)
+.github/SECRETS_NEEDED.txt
+.github/workflows/*.local.yml
+
+
+# Local CI helper scripts (set_secrets.py uses raw API token - never commit)
+.github/scripts/set_secrets.py
+apk_build_logs/

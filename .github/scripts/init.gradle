@@ -1,0 +1,13 @@
+// Intentionally empty.
+// Aliyun mirrors are configured directly in:
+//   - android/settings.gradle (pluginManagement.repositories)
+//   - android/build.gradle (allprojects.repositories)
+//
+// Earlier versions of this file injected extra `maven { url ... }` blocks via
+// `allprojects { repositories { ... } }`, but this conflicts with Gradle 8.3's
+// PREFER_SETTINGS mode and causes:
+//   "Error resolving plugin ... repository 'maven' was added by settings.gradle"
+//
+// Keep this file as a no-op so the workflow step that copies it into ~/.gradle
+// succeeds. To re-enable forced mirrors, use `dependencyResolutionManagement`
+// in the project's settings.gradle instead.
