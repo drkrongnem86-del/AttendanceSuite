@@ -92,3 +92,7 @@ Desktop.ini
 # Local CI helper scripts (set_secrets.py uses raw API token - never commit)
 .github/scripts/set_secrets.py
 apk_build_logs/
+
+# APK binaries are too large for git - distribute via GitHub Releases instead
+apk/*.apk
+apk/*.zip
