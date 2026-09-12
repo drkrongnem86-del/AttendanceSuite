@@ -56,12 +56,14 @@ class _RemotePunchScreenState extends State<RemotePunchScreen> {
         _lastResult = 'Vui lòng nhập mã NV';
         _lastSuccess = false;
       });
+      HapticFeedback.lightImpact();
       return;
     }
     setState(() {
       _submitting = true;
       _userId = uid;
     });
+    HapticFeedback.selectionClick();
     try {
       final result = await widget.api.remotePunch(
         uid, _selectedStatus, deviceIp: _selectedDevice,
@@ -83,23 +85,35 @@ class _RemotePunchScreenState extends State<RemotePunchScreen> {
         }
       });
       if (ok) {
+        HapticFeedback.mediumImpact();
         _userCtrl.clear();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✓ Đã ghi NV $uid ${_statuses[_selectedStatus]['vn']}'),
             backgroundColor: Colors.green.shade700,
             duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         );
       } else {
+        HapticFeedback.heavyImpact();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✗ $msg'),
             backgroundColor: Colors.red.shade700,
             duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         );
       }
+    } catch (e) {
+      setState(() {
+        _lastResult = '✗ Loi: $e';
+        _lastSuccess = false;
+      });
+      HapticFeedback.heavyImpact();
     } finally {
       setState(() => _submitting = false);
     }

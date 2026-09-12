@@ -6,6 +6,7 @@ import 'settings.dart';
 import 'viewer_screen.dart';
 import 'simulator_screen.dart';
 import 'remote_punch_screen.dart';
+import 'updater.dart';
 
 void main() {
   runApp(const AttendanceApp());
@@ -56,6 +57,22 @@ class _HomeScreenState extends State<HomeScreen> {
       _serverIp = ip;
       _api = AttendanceApi('http://$ip:8080');
     });
+    // Check for app updates sau khi load xong (khong block UI)
+    _checkForUpdates();
+  }
+
+  Future<void> _checkForUpdates() async {
+    // Doi 5s de UI load xong truoc
+    await Future.delayed(const Duration(seconds: 5));
+    if (!mounted) return;
+    try {
+      final info = await AppUpdater.checkForUpdate();
+      if (mounted && info.isUpdateAvailable) {
+        await AppUpdater.showUpdateDialog(context, info);
+      }
+    } catch (e) {
+      // Silent - khong can thong bao loi update
+    }
   }
 
   Future<void> _editServerIp() async {

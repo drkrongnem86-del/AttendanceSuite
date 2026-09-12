@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.3.2+6
+version: 1.3.3+7
 
 environment:
   sdk: ^3.5.4
@@ -38,6 +38,9 @@ dependencies:
 
   # HTTP client for talking to the AttendanceSuite Python backend
   http: ^1.2.0
+
+  # For opening release page in browser (auto-update)
+  url_launcher: ^6.3.0
 
   # For persisting server IP and settings
   shared_preferences: ^2.2.2
