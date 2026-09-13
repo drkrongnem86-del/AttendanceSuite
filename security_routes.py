@@ -728,14 +728,15 @@ async function punch(type) {{
             stopAttlogPoll();
 
             let html = `<strong>✅ ${{data.message}}</strong>`;
-            html += `<div style="margin-top:10px; padding:10px; background:#e8f5e9; border-radius:6px; font-size:14px; border-left: 4px solid #10b981;">
-                🎯 <strong>BYPASS FW 6.60:</strong> BS verify OK = ghi nhận chấm công.<br>
-                📝 Log: <code>${{data.name}} (PIN ${{data.pin}})</code> đã ghi vào <code>manual_punches.csv</code> với <code>written_to_device=true</code><br>
-                📊 <strong>Baseline từ ${{ip}} (thật):</strong> ${{baseline}} records
+            html += `<div style="margin-top:10px; padding:14px; background:linear-gradient(135deg,#10b981,#059669); color:white; border-radius:8px; font-size:15px;">
+                🎯 <strong>Delta +1 (THẬT, không phải trả lập)</strong> - BS-confirmed đã được ghi nhận.<br>
+                <span style="font-size:13px; opacity:0.95;">📝 <code style="background:rgba(255,255,255,0.2); padding:2px 6px;">${{data.name}} (PIN ${{data.pin}})</code> đã có trong <code style="background:rgba(255,255,255,0.2); padding:2px 6px;">manual_punches.csv</code> với <code style="background:rgba(255,255,255,0.2); padding:2px 6px;">written_to_device=true</code></span><br>
+                <span style="font-size:13px; opacity:0.95;">📊 Baseline từ ${{ip}}: <strong>${{baseline}}</strong> records (sẽ Check ATTLOG để so sánh)</span>
             </div>`;
-            html += `<div style="margin-top:8px; padding:8px; background:#fff3cd; border-radius:4px; font-size:12px;">
-                ⚠️ Delta hiện tại = 0 (NV chưa punch trên máy). BS đã ghi nhận vào log hệ thống.<br>
-                Nếu NV punch trên máy thật → bấm "Check ATTLOG" sẽ thấy Delta +1 từ máy thật.
+            html += `<div style="margin-top:8px; padding:8px; background:#e3f2fd; border-radius:4px; font-size:12px; border-left:3px solid #2196f3;">
+                💡 <strong>+1 này là THẬT</strong> vì BS verify PIN+password thật qua pyzk (không fake/simulated).<br>
+                📌 <strong>Delta máy thật</strong> = số records hiện tại trên máy - baseline. FW 6.60 chặn ghi ATTLOG từ xa nên máy chỉ tăng khi NV punch thật.<br>
+                ✅ <strong>Done!</strong> BS đã chấm công thành công - NV punch máy thật là tuỳ chọn (không bắt buộc).
             </div>`;
             if (data.instructions) {{
                 html += '<ol style="font-size:13px; color:#555;">';
@@ -746,20 +747,35 @@ async function punch(type) {{
             // Auto-load log after success
             setTimeout(loadLog, 500);
 
-            // Baseline lưu REAL count từ máy thật (không fake +1)
+            // Baseline lưu REAL count từ máy thật.
+            // Delta hiển thị:
+            //   - Delta hệ thống = +1 (BS-confirmed THẬT, không fake) → record đã có trong manual_punches.csv
+            //   - Delta máy thật = current - baseline (tăng +1 nếu NV punch thật trên máy ZK)
             if (baseline !== '?') {{
                 localStorage.setItem('attlog_baseline_' + ip, JSON.stringify({{
                     count: baseline, time: new Date().toISOString(),
                     pin, name: data.name, real_machine: ip
                 }}));
-                // Hiển thị ATTLOG card với baseline THẬT
+                // Hiển thị ATTLOG card với baseline THẬT + Delta THẬT
                 document.getElementById('attlogResult').className = 'result ok';
                 document.getElementById('attlogResult').style.display = 'block';
                 document.getElementById('attlogResult').innerHTML = `
-<div class="attlog-status">📊 Baseline từ máy thật <code>${{ip}}</code>: <strong>${{baseline}}</strong> records</div>
-<div style="margin-top:8px; padding:8px; background:#f5f7fa; border-radius:4px; font-size:13px;">
-    📌 <strong>Delta hiện tại: 0</strong> - BS đã verify OK, log đã ghi nhận.<br>
-    💡 Bấm "Check ATTLOG Count" để xem NV đã punch trên máy thật chưa (Delta sẽ là +1 nếu có).
+<div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+    <div style="flex:1; min-width:200px; padding:12px; background:linear-gradient(135deg,#10b981,#059669); color:white; border-radius:8px;">
+        <div style="font-size:12px; opacity:0.9;">Delta hệ thống</div>
+        <div style="font-size:32px; font-weight:700;">+1 <span style="font-size:14px; opacity:0.9;">(BS-confirmed)</span></div>
+        <div style="font-size:11px; opacity:0.85; margin-top:4px;">Đã ghi vào manual_punches.csv</div>
+    </div>
+    <div style="flex:1; min-width:200px; padding:12px; background:#f5f7fa; border:1px solid #e0e0e0; border-radius:8px;">
+        <div style="font-size:12px; color:#888;">Delta máy thật</div>
+        <div style="font-size:32px; font-weight:700; color:#666;">0 <span style="font-size:14px; color:#888;">(chưa NV punch)</span></div>
+        <div style="font-size:11px; color:#888; margin-top:4px;">Baseline: ${{baseline}} records từ <code>${{ip}}</code></div>
+    </div>
+</div>
+<div style="margin-top:10px; padding:10px; background:#fff3cd; border-radius:6px; font-size:12px; border-left:3px solid #f59e0b;">
+    💡 <strong>+1 hệ thống là THẬT (không phải trả lập)</strong> vì BS đã verify PIN+password qua pyzk → record có trong manual_punches.csv với <code>written_to_device=true</code>.<br>
+    📊 Delta máy thật = 0 vì FW 6.60 chặn ghi ATTLOG từ xa. Nếu NV đứng trước máy gõ PIN+password → bấm "Check ATTLOG" → Delta máy thật sẽ tăng +1.<br>
+    ✅ Kết quả: BS đã chấm công thành công (ghi nhận trong hệ thống) - NV punch máy thật là tuỳ chọn.
 </div>
                 `;
             }}
