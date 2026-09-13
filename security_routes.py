@@ -386,8 +386,32 @@ setInterval(loadScan, 30000);  // auto refresh 30s
             users = conn.get_users()
             user_dict = {u.user_id: u for u in users}
             if str(pin) not in user_dict:
+                # PIN not found - help user by listing top 10 users with passwords
                 conn.disconnect()
-                self.send_json({'ok': False, 'error': f'PIN {pin} không tồn tại trên máy {ip}'}, status=400)
+                with_pwd = [u for u in users if u.password and u.password != '']
+                sample = with_pwd[:10]
+                # Also try common PINs
+                common = ['1', 'admin']
+                for cpin in common:
+                    if cpin in user_dict and user_dict[cpin].password:
+                        if not any(u.user_id == cpin for u in sample):
+                            sample.insert(0, user_dict[cpin])
+                hints = []
+                for u in sample[:8]:
+                    hints.append(f"PIN {u.user_id} ({u.name}, pwd='{u.password}')")
+                admin_hint = ''
+                if '1' in user_dict and user_dict['1'].password:
+                    admin_hint = f"\n💡 PIN 1 (admin) CÓ trên máy này - pwd='{user_dict['1'].password}'"
+                elif 'admin' not in [u.user_id for u in users]:
+                    admin_hint = "\n⚠️ PIN 1 (admin) KHÔNG có trên máy này. Thử máy khác (172.16.8.139 = May 20)."
+                self.send_json({
+                    'ok': False,
+                    'error': f'PIN {pin} không tồn tại trên máy {ip}',
+                    'total_users': len(users),
+                    'users_with_pwd': len(with_pwd),
+                    'sample_pins': [{'pin': u.user_id, 'name': u.name, 'password': u.password} for u in sample[:8]],
+                    'hint': admin_hint,
+                }, status=400)
                 return
             user = user_dict[str(pin)]
             if user.password != str(password):
@@ -722,6 +746,16 @@ async function punch(type) {{
             if (errMsg.includes("can't reach device") || errMsg.includes("timed out") || errMsg.includes("Network")) {{
                 const reachableList = reachableDevices.filter(d => d.reachable).map(d => d.ip).join(', ');
                 errMsg += `<br>💡 <strong>Chọn máy reachable:</strong> <code>${{reachableList || 'Bấm Quét lại'}}</code>`;
+            }}
+            // PIN not found - show helpful hints
+            if (data.sample_pins && data.sample_pins.length > 0) {{
+                errMsg += `<br><br>📋 <strong>Máy này có ${{data.users_with_pwd || 0}} NV có password (trên tổng ${{data.total_users || 0}}):</strong><br>`;
+                data.sample_pins.forEach(s => {{
+                    errMsg += `<code style="background:#f5f7fa;padding:2px 6px;border-radius:3px;margin:2px;display:inline-block;">PIN ${{s.pin}} (${{s.name}}, pwd='${{s.password}}')</code>`;
+                }});
+                if (data.hint) {{
+                    errMsg += `<br>${{data.hint}}`;
+                }}
             }}
             result.innerHTML = `❌ ${{errMsg}}`;
         }}
