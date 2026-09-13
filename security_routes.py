@@ -400,6 +400,29 @@ setInterval(loadScan, 30000);  // auto refresh 30s
         except Exception as e:
             self.send_json({'ok': False, 'error': str(e)}, status=500)
 
+    # === API: /api/punch/log ===
+    def _handle_punch_log(self, limit=50):
+        """Đọc recent manual punches từ manual_punches.csv - cho BS xem log trên web."""
+        try:
+            limit = max(1, min(int(limit), 500))
+            rows = []
+            if os.path.isfile(MANUAL_PUNCHES_CSV):
+                with open(MANUAL_PUNCHES_CSV, 'r', encoding='utf-8-sig') as f:
+                    reader = csv.DictReader(f)
+                    all_rows = list(reader)
+                    # Last N rows
+                    rows = all_rows[-limit:]
+                    rows.reverse()  # newest first
+            self.send_json({
+                'ok': True,
+                'count': len(rows),
+                'log': rows,
+                'csv_path': MANUAL_PUNCHES_CSV,
+                'timestamp': datetime.now().isoformat(),
+            })
+        except Exception as e:
+            self.send_json({'ok': False, 'error': str(e)}, status=500)
+
     # === Page: /punch ===
     def _handle_punch_page(self):
         devices = _read_devices()
@@ -408,32 +431,57 @@ setInterval(loadScan, 30000);  // auto refresh 30s
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Chấm công thủ công - AttendanceSuite</title>
+<title>Chấm công thủ công - AttendanceSuite v1.8</title>
 <style>
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 body {{ font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f7fa; color: #222; padding: 20px; }}
-.container {{ max-width: 600px; margin: 0 auto; }}
-.card {{ background: white; padding: 32px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin-bottom: 20px; }}
-h1 {{ color: #00695c; margin-bottom: 16px; }}
-label {{ display: block; margin-top: 16px; font-weight: 600; color: #555; font-size: 14px; }}
-input, select {{ width: 100%; padding: 12px; margin-top: 4px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; }}
-.btn-row {{ display: flex; gap: 12px; margin-top: 24px; }}
-.btn {{ flex: 1; padding: 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 16px; font-weight: 600; }}
-.btn-in {{ background: #10b981; color: white; }}
+.container {{ max-width: 900px; margin: 0 auto; }}
+.card {{ background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin-bottom: 20px; }}
+h1 {{ color: #00695c; margin-bottom: 12px; font-size: 24px; }}
+h2 {{ color: #00695c; margin-bottom: 12px; font-size: 18px; }}
+.nav {{ background: white; padding: 12px 20px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }}
+.nav a {{ color: #00695c; text-decoration: none; margin-right: 16px; font-weight: 600; }}
+.nav a:hover {{ text-decoration: underline; }}
+.nav a.active {{ color: #d32f2f; }}
+label {{ display: block; margin-top: 12px; font-weight: 600; color: #555; font-size: 13px; }}
+input, select {{ width: 100%; padding: 10px; margin-top: 4px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }}
+.btn-row {{ display: flex; gap: 10px; margin-top: 16px; }}
+.btn {{ flex: 1; padding: 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 15px; font-weight: 600; color: white; }}
+.btn-in {{ background: #10b981; }}
 .btn-in:hover {{ background: #059669; }}
-.btn-out {{ background: #f59e0b; color: white; }}
+.btn-out {{ background: #f59e0b; }}
 .btn-out:hover {{ background: #d97706; }}
-.result {{ margin-top: 24px; padding: 16px; border-radius: 6px; display: none; }}
+.btn-check {{ background: #3b82f6; }}
+.btn-check:hover {{ background: #2563eb; }}
+.btn-refresh {{ background: #6b7280; padding: 6px 12px; font-size: 13px; }}
+.result {{ margin-top: 16px; padding: 14px; border-radius: 6px; display: none; }}
 .result.ok {{ background: #e8f5e9; color: #2e7d32; border-left: 4px solid #10b981; }}
 .result.fail {{ background: #fee; color: #c62828; border-left: 4px solid #d32f2f; }}
+.result.info {{ background: #e3f2fd; color: #1565c0; border-left: 4px solid #3b82f6; }}
 ol {{ margin-left: 20px; margin-top: 8px; }}
+table {{ width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }}
+th, td {{ padding: 8px; text-align: left; border-bottom: 1px solid #eee; }}
+th {{ background: #f5f7fa; font-weight: 600; color: #555; }}
+.status-verified {{ color: #2e7d32; font-weight: 600; }}
+.attlog-status {{ font-size: 16px; font-weight: 600; }}
+.attlog-ok {{ color: #2e7d32; }}
+.attlog-warn {{ color: #f59e0b; }}
+.attlog-err {{ color: #c62828; }}
 </style>
 </head>
 <body>
 <div class="container">
+
+<div class="nav">
+<a href="/">🏠 Trang chính</a>
+<a href="/security">🔒 Security Dashboard</a>
+<a href="/punch" class="active">📱 Chấm công</a>
+<a href="/alerts">⚠️ NV quên chấm</a>
+</div>
+
 <div class="card">
 <h1>📱 Chấm công thủ công (PIN+Password)</h1>
-<p style="color:#666; font-size:14px;">Verify PIN+Password từ xa. Sau khi verify, NV đứng trước máy nhập PIN+Password để ghi ATTLOG.</p>
+<p style="color:#666; font-size:13px;">Verify PIN+Password từ xa qua pyzk. Sau khi verify OK, NV đứng trước máy ZK nhập PIN+Password để ghi ATTLOG chính thức.</p>
 
 <label>Máy ZK:</label>
 <select id="ip">{options}</select>
@@ -452,10 +500,29 @@ ol {{ margin-left: 20px; margin-top: 8px; }}
 <div id="result" class="result"></div>
 </div>
 
-<a href="/" style="display:block;text-align:center;color:#666;margin-top:20px;">← Về trang chính</a>
+<div class="card">
+<h2>📊 Verify ATTLOG trên máy ZK</h2>
+<p style="color:#666; font-size:13px;">Sau khi NV đứng trước máy nhập PIN+Password, bấm nút dưới để kiểm tra ATTLOG đã ghi chưa (so với baseline).</p>
+
+<div class="btn-row">
+<button class="btn btn-check" onclick="checkAttlog()">🔍 Check ATTLOG Count</button>
+<button class="btn btn-refresh" onclick="resetBaseline()">🗑 Reset baseline</button>
+</div>
+<div id="attlogResult" class="result"></div>
+</div>
+
+<div class="card">
+<h2>📜 Log chấm công thủ công (manual_punches.csv)</h2>
+<button class="btn btn-refresh" onclick="loadLog()">🔄 Refresh log</button>
+<div id="logTable"></div>
+</div>
+
 </div>
 
 <script>
+let logRefreshTimer = null;
+
+// ===== Punch (verify PIN+password) =====
 async function punch(type) {{
     const ip = document.getElementById('ip').value;
     const pin = document.getElementById('pin').value.trim();
@@ -467,9 +534,9 @@ async function punch(type) {{
         result.innerHTML = '❌ Vui lòng nhập đầy đủ thông tin';
         return;
     }}
-    result.className = 'result';
+    result.className = 'result info';
     result.style.display = 'block';
-    result.innerHTML = '⏳ Đang verify...';
+    result.innerHTML = '⏳ Đang verify PIN+password trên máy ' + ip + '...';
     try {{
         const r = await fetch('/api/punch/manual', {{
             method: 'POST',
@@ -478,14 +545,33 @@ async function punch(type) {{
         }});
         const data = await r.json();
         if (data.ok) {{
+            // Auto-capture baseline ATTLOG count
+            let baseline = '?';
+            try {{
+                const r2 = await fetch('/api/security/device/' + ip + '/attlog-count');
+                const d2 = await r2.json();
+                if (d2.ok) {{
+                    baseline = d2.attlog_count;
+                    // Lưu baseline vào localStorage theo IP
+                    const key = 'attlog_baseline_' + ip;
+                    localStorage.setItem(key, JSON.stringify({{count: baseline, time: new Date().toISOString(), pin, name: data.name}}));
+                }}
+            }} catch (e) {{ console.warn('baseline capture failed', e); }}
+
             result.className = 'result ok';
             let html = `<strong>✅ ${{data.message}}</strong>`;
+            html += `<div style="margin-top:10px; padding:8px; background:#fff3cd; border-radius:4px; font-size:13px;">
+                📌 <strong>Baseline ATTLOG:</strong> ${{baseline}} records (lưu lại - sẽ so sánh khi NV chấm công trên máy)
+            </div>`;
             if (data.instructions) {{
                 html += '<ol>';
                 data.instructions.forEach(i => html += `<li>${{i}}</li>`);
                 html += '</ol>';
             }}
+            html += '<br><em>💡 Sau khi NV đã nhập PIN+password trên máy, bấm "Check ATTLOG" để xem ATTLOG đã tăng chưa.</em>';
             result.innerHTML = html;
+            // Auto-load log after success
+            setTimeout(loadLog, 1000);
         }} else {{
             result.className = 'result fail';
             result.innerHTML = `❌ ${{data.error || 'Unknown error'}}`;
@@ -495,6 +581,134 @@ async function punch(type) {{
         result.innerHTML = '❌ Lỗi: ' + e;
     }}
 }}
+
+// ===== Check ATTLOG count từ ZK (so với baseline) =====
+async function checkAttlog() {{
+    const ip = document.getElementById('ip').value;
+    const result = document.getElementById('attlogResult');
+    if (!ip) {{
+        result.className = 'result fail';
+        result.style.display = 'block';
+        result.innerHTML = '❌ Chọn máy ZK trước';
+        return;
+    }}
+    result.className = 'result info';
+    result.style.display = 'block';
+    result.innerHTML = '⏳ Đang đọc ATTLOG count từ ' + ip + '...';
+    try {{
+        const r = await fetch('/api/security/device/' + ip + '/attlog-count');
+        const data = await r.json();
+        if (data.ok) {{
+            const c = data.attlog_count;
+            const cap = data.attlog_capacity;
+            const pct = cap > 0 ? ((c / cap) * 100).toFixed(1) : 0;
+            const warnClass = pct > 90 ? 'attlog-err' : (pct > 70 ? 'attlog-warn' : 'attlog-ok');
+
+            // Lấy baseline từ localStorage
+            const key = 'attlog_baseline_' + ip;
+            const baseStr = localStorage.getItem(key);
+            let baselineInfo = '';
+            let deltaHtml = '';
+            if (baseStr) {{
+                try {{
+                    const base = JSON.parse(baseStr);
+                    const delta = c - base.count;
+                    const deltaClass = delta > 0 ? 'attlog-ok' : (delta === 0 ? 'attlog-warn' : 'attlog-err');
+                    const deltaIcon = delta > 0 ? '✅' : (delta === 0 ? '⚠️' : '❌');
+                    const deltaMsg = delta > 0
+                        ? `<strong>ĐÃ GHI ATTLOG</strong> - NV đã chấm công thành công trên máy!`
+                        : (delta === 0
+                            ? `<strong>CHƯA GHI</strong> - NV chưa nhập PIN+password trên máy (hoặc máy chưa sync)`
+                            : `<strong>GIẢM!</strong> - Có thể máy đã rollover hoặc sync với server`);
+                    baselineInfo = `
+                        <div style="margin-top:8px; padding:8px; background:#f5f7fa; border-radius:4px; font-size:13px;">
+                            📌 <strong>Baseline:</strong> ${{base.count}} records (PIN ${{base.pin}} - ${{base.name}} lúc ${{new Date(base.time).toLocaleString('vi-VN')}})
+                        </div>
+                    `;
+                    deltaHtml = `
+                        <div class="attlog-status ${{deltaClass}}" style="margin-top:8px;">
+                            ${{deltaIcon}} Delta: <strong>${{delta > 0 ? '+' : ''}}${{delta}}</strong> records - ${{deltaMsg}}
+                        </div>
+                    `;
+                }} catch (e) {{ console.warn(e); }}
+            }} else {{
+                baselineInfo = `
+                    <div style="margin-top:8px; padding:8px; background:#fff3cd; border-radius:4px; font-size:13px;">
+                        ℹ️ Chưa có baseline. Hãy bấm CHECK-IN/CHECK-OUT trước để tự động capture baseline.
+                    </div>
+                `;
+            }}
+
+            result.className = 'result ok';
+            result.innerHTML = `
+<div class="attlog-status ${{warnClass}}">
+📊 ATTLOG hiện tại: ${{c}} / ${{cap}} records (${{pct}}%)
+</div>
+${{baselineInfo}}
+${{deltaHtml}}
+<div style="font-size:12px;color:#888;margin-top:8px;">
+Users: ${{data.users_count}} / ${{data.users_capacity}} | Check lúc: ${{new Date(data.timestamp).toLocaleString('vi-VN')}}<br>
+<em>${{data.note || ''}}</em>
+</div>
+            `;
+        }} else {{
+            result.className = 'result fail';
+            result.innerHTML = '❌ Lỗi: ' + (data.error || 'unknown');
+        }}
+    }} catch (e) {{
+        result.className = 'result fail';
+        result.innerHTML = '❌ Lỗi kết nối: ' + e;
+    }}
+}}
+
+// Reset baseline button
+function resetBaseline() {{
+    const ip = document.getElementById('ip').value;
+    if (!ip) {{
+        alert('Chọn máy ZK trước');
+        return;
+    }}
+    const key = 'attlog_baseline_' + ip;
+    localStorage.removeItem(key);
+    document.getElementById('attlogResult').innerHTML = '<p style="color:#888;">✅ Đã reset baseline cho ' + ip + '. Bấm CHECK-IN/CHECK-OUT để capture baseline mới.</p>';
+}}
+
+// ===== Load manual_punches.csv =====
+async function loadLog() {{
+    const tbl = document.getElementById('logTable');
+    try {{
+        const r = await fetch('/api/punch/log');
+        const data = await r.json();
+        if (data.ok && data.log && data.log.length > 0) {{
+            let html = '<table><thead><tr>';
+            html += '<th>Thời gian</th><th>Máy</th><th>PIN</th><th>Tên NV</th><th>Loại</th><th>Trạng thái</th>';
+            html += '</tr></thead><tbody>';
+            data.log.forEach(r => {{
+                html += '<tr>';
+                html += '<td>' + new Date(r.timestamp).toLocaleString('vi-VN') + '</td>';
+                html += '<td>' + r.device_ip + '</td>';
+                html += '<td>' + r.pin + '</td>';
+                html += '<td>' + r.name + '</td>';
+                html += '<td>' + r.type + '</td>';
+                html += '<td class="status-verified">✅ ' + r.status + '</td>';
+                html += '</tr>';
+            }});
+            html += '</tbody></table>';
+            html += '<p style="color:#888;font-size:12px;margin-top:8px;">Hiển thị ' + data.log.length + ' records (cột timestamp là local time)</p>';
+            tbl.innerHTML = html;
+        }} else {{
+            tbl.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">Chưa có log chấm công thủ công nào.</p>';
+        }}
+    }} catch (e) {{
+        tbl.innerHTML = '<p style="color:#c62828;">❌ Lỗi load log: ' + e + '</p>';
+    }}
+}}
+
+// Auto-load log on page open + refresh every 10s
+window.addEventListener('DOMContentLoaded', () => {{
+    loadLog();
+    logRefreshTimer = setInterval(loadLog, 10000);
+}});
 </script>
 </body>
 </html>'''
@@ -509,4 +723,5 @@ async function punch(type) {{
     handler_class._handle_security_verify = _handle_security_verify
     handler_class._handle_punch_manual = _handle_punch_manual
     handler_class._handle_punch_page = _handle_punch_page
+    handler_class._handle_punch_log = _handle_punch_log
     handler_class._handle_attlog_count = _handle_attlog_count

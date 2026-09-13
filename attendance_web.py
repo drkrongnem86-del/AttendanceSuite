@@ -1710,6 +1710,8 @@ class Handler(BaseHTTPRequestHandler):
             parts = path.split('/')
             ip = parts[4] if len(parts) > 4 else ''
             self._handle_attlog_count(ip)
+        elif path == '/api/punch/log':
+            self._handle_punch_log()
         elif path == '/api/punch/manual':
             data = self._read_json_body()
             self._handle_punch_manual(data)
