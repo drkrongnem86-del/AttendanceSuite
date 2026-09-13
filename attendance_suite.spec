@@ -9,6 +9,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('attendance_web.py', '.'),
+        ('security_routes.py', '.'),
         ('punch_simulator.py', '.'),
         ('remote_punch_service.py', '.'),
         ('config.json', '.'),
@@ -19,6 +20,8 @@ a = Analysis(
         'zk', 'zk.base', 'zk.const', 'zk.terminal', 'zk.exception',
         'http.server', 'socketserver', 'csv', 'json', 'urllib.parse',
         'struct', 'threading', 'shutil', 'subprocess', 'webbrowser',
+        'flask', 'flask_cors', 'requests',
+        'sqlite3',
     ],
     hookspath=[],
     runtime_hooks=[],

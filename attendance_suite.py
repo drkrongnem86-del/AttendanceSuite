@@ -27,7 +27,8 @@ if getattr(sys, 'frozen', False):
     # Ta copy tu bundle ra SCRIPT_DIR neu can
     import shutil
     SCRIPT_DIR.mkdir(parents=True, exist_ok=True)
-    for f in ['attendance_web.py', 'punch_simulator.py', 'remote_punch_service.py',
+    for f in ['attendance_web.py', 'security_routes.py',
+              'punch_simulator.py', 'remote_punch_service.py',
               'config.json', 'devices.csv', 'launcher.html']:
         src = BUNDLE_DIR / f
         dst = SCRIPT_DIR / f

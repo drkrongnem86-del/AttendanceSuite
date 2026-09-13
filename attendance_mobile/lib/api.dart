@@ -208,6 +208,100 @@ class AttendanceApi {
       return {'ok': false, 'error': e.toString()};
     }
   }
+
+  // ===== v1.8.0: Security + PIN+Password workflow =====
+
+  /// Scan tất cả máy ZK - phát hiện Comm Key default, Telnet, FW, users with PWD
+  /// Timeout: 2-3 phút (24 devices × 2-3s/device)
+  Future<Map<String, dynamic>> securityScan() async {
+    try {
+      final authHeader = await _basicAuthHeader();
+      final resp = await _client
+          .get(
+            Uri.parse('$baseUrl/api/security/scan'),
+            headers: {'Authorization': authHeader},
+          )
+          .timeout(const Duration(seconds: 180));
+      if (resp.statusCode == 200) {
+        return json.decode(resp.body) as Map<String, dynamic>;
+      }
+      return {'error': 'HTTP ${resp.statusCode}'};
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  /// Verify PIN+password trên máy ZK
+  /// Trả về {match, pin, name, db_password, input_password, can_cham_cong, instructions}
+  Future<Map<String, dynamic>> verifyPinPassword(
+      String deviceIp, String pin, String password) async {
+    try {
+      final authHeader = await _basicAuthHeader();
+      final url = Uri.parse(
+          '$baseUrl/api/security/device/$deviceIp/verify?pin=$pin&password=$password');
+      final resp = await _client
+          .get(url, headers: {'Authorization': authHeader})
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode == 200) {
+        return json.decode(resp.body) as Map<String, dynamic>;
+      }
+      return {'match': false, 'error': 'HTTP ${resp.statusCode}'};
+    } catch (e) {
+      return {'match': false, 'error': e.toString()};
+    }
+  }
+
+  /// Manual punch workflow - verify PIN+password + log
+  /// [punchType]: "check_in" hoặc "check_out"
+  /// Trả về {ok, verified, pin, name, device_ip, message, instructions}
+  Future<Map<String, dynamic>> manualPunch(
+      String deviceIp, String pin, String password, String punchType) async {
+    try {
+      final authHeader = await _basicAuthHeader();
+      final resp = await _client
+          .post(
+            Uri.parse('$baseUrl/api/punch/manual'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: json.encode({
+              'ip': deviceIp,
+              'pin': pin,
+              'password': password,
+              'punch_type': punchType,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode == 200) {
+        return json.decode(resp.body) as Map<String, dynamic>;
+      }
+      return {'ok': false, 'error': 'HTTP ${resp.statusCode}'};
+    } catch (e) {
+      return {'ok': false, 'error': e.toString()};
+    }
+  }
+
+  /// Đọc ATTLOG count từ ZK device - để BS check trên app xem ATTLOG đã ghi chưa
+  /// Trả về {ok, ip, attlog_count, attlog_capacity, users_count, users_capacity, timestamp}
+  /// Timeout: 30s (vì đi qua mạng LAN chậm)
+  Future<Map<String, dynamic>> getAttlogCount(String deviceIp) async {
+    try {
+      final authHeader = await _basicAuthHeader();
+      final resp = await _client
+          .get(
+            Uri.parse('$baseUrl/api/security/device/$deviceIp/attlog-count'),
+            headers: {'Authorization': authHeader},
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode == 200) {
+        return json.decode(resp.body) as Map<String, dynamic>;
+      }
+      return {'ok': false, 'error': 'HTTP ${resp.statusCode}'};
+    } catch (e) {
+      return {'ok': false, 'error': e.toString()};
+    }
+  }
 }
 
 class Device {

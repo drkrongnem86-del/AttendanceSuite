@@ -11,6 +11,8 @@ import 'simulator_screen.dart';
 import 'remote_punch_screen.dart';
 import 'settings_screen.dart';
 import 'presentation/screens/vpn_screen.dart';
+import 'presentation/screens/security_screen.dart';
+import 'presentation/screens/pin_password_screen.dart';
 import 'core/services/vpn_benh_vien_service.dart';
 
 void main() {
@@ -381,6 +383,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ViewerScreen(api: _api!, onSettings: _editServerIp),
           SimulatorScreen(api: _api!),
           RemotePunchScreen(api: _api!),
+          SecurityScreen(api: _api!),
+          PinPasswordScreen(api: _api!),
           const SettingsScreen(),
         ],
       ),
@@ -400,6 +404,14 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.cloud_upload),
             label: 'Chấm từ xa',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.security),
+            label: 'Bảo mật',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.pin),
+            label: 'PIN+PWD',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings),

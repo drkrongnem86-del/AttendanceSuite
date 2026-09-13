@@ -43,6 +43,66 @@ TYPES = {
     'unknown':    {'name': 'Khong ro', 'color': '#888', 'icon': '[?]'},
 }
 
+# Shift (ca) detection by time of day
+SHIFTS = {
+    'morning':  {'name': 'Ca sang',  'start': '06:00', 'end': '12:00', 'color': '#ffd166'},
+    'afternoon':{'name': 'Ca chieu', 'start': '12:00', 'end': '18:00', 'color': '#06d6a0'},
+    'evening':  {'name': 'Ca toi',   'start': '18:00', 'end': '22:00', 'color': '#118ab2'},
+    'night':    {'name': 'Ca dem',   'start': '22:00', 'end': '06:00', 'color': '#073b4c'},
+}
+
+
+def _detect_ca(time_str):
+    """Detect ca (shift) from time HH:MM:SS. Returns 'morning'/'afternoon'/'evening'/'night'."""
+    if not time_str or ':' not in time_str:
+        return None
+    try:
+        h = int(time_str.split(':')[0])
+        if 6 <= h < 12:
+            return 'morning'
+        elif 12 <= h < 18:
+            return 'afternoon'
+        elif 18 <= h < 22:
+            return 'evening'
+        else:  # 22-23, 0-5
+            return 'night'
+    except:
+        return None
+
+
+def _khoa_from_device(device_ip):
+    """Map device_ip -> khoa (department) using devices.csv notes.
+    'May 1' -> 'Khoa 1', 'May 16 + Web' -> 'Khoa 16', etc.
+    Falls back to Note from devices.csv, then IP.
+    """
+    if not device_ip:
+        return 'N/A'
+    # Cache lookup in devices_state
+    for d in devices_state:
+        if d.get('ip') == device_ip:
+            note = d.get('note', '').strip()
+            if note:
+                # Heuristics: "May 1" / "May 16 + Web" -> "Khoa 1" / "Khoa 16"
+                if note.lower().startswith('may'):
+                    parts = note.split()
+                    if len(parts) >= 2:
+                        num = parts[1].replace('+', '').strip()
+                        if num.isdigit():
+                            return f'Khoa {num}'
+                return note
+            return device_ip
+    return device_ip
+
+
+def _list_khoa():
+    """Return sorted list of unique khoa from devices_state."""
+    khoas = set()
+    for d in devices_state:
+        k = _khoa_from_device(d.get('ip', ''))
+        if k:
+            khoas.add(k)
+    return sorted(khoas)
+
 devices_state = []
 all_records = []
 fetch_status = {'running': False, 'progress': 0, 'total': 0, 'message': 'San sang', 'cancel_requested': False}
@@ -785,6 +845,8 @@ tbody tr:nth-child(even):hover { background: #f0f4f8; }
   <button class="btn-outline" id="btnToday" onclick="openToday()">📅 Hôm nay</button>
   <button class="btn-outline" id="btnExcel" onclick="exportExcel()">📑 Excel</button>
   <button class="btn-warning" id="btnMerge" onclick="openMerge()">⚠ So sánh Shadow Log</button>
+  <button class="btn-danger" id="btnAlerts" onclick="window.open('/alerts', '_blank')">🚨 NV quên chấm</button>
+  <button class="btn-success" id="btnBackup" onclick="triggerBackup()">💾 Backup ngay</button>
   <a href="/merge" class="btn-outline" style="text-decoration:none;display:inline-flex;align-items:center">🔀 MERGE Workflow →</a>
 </div>
 <div class="container">
@@ -1286,24 +1348,94 @@ function exportCsv() {
   setStatus('Da export ' + filtered.length + ' ban ghi ra file CSV.', false);
 }
 
+// === REPORT FILTERS ===
+function applyReportFilter() {
+  const fca = document.getElementById('f-ca');
+  const fkhoa = document.getElementById('f-khoa');
+  if (fca) reportState.ca = fca.value;
+  if (fkhoa) reportState.khoa = fkhoa.value;
+  openReport();
+}
+function resetReportFilter() {
+  reportState.ca = '';
+  reportState.khoa = '';
+  openReport();
+}
+
+// === BACKUP TRIGGER ===
+async function triggerBackup() {
+  if (!confirm('Backup ngay D:\\\\chamcong\\\\backups\\\\?')) return;
+  try {
+    const r = await fetch('/api/backup/now', {method: 'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      alert('Backup OK: ' + d.message + '\\n' + d.files.join('\\n'));
+    } else {
+      alert('Backup loi: ' + d.message);
+    }
+  } catch (e) {
+    alert('Backup failed: ' + e);
+  }
+}
+
 // === REPORTS ===
+let reportState = {ca: '', khoa: '', shifts: [], khoas: []};
 async function openReport() {
   document.getElementById('reportModal').style.display = 'block';
   document.getElementById('reportContent').innerHTML = '<p style="color:#888">Dang tai bao cao...</p>';
   try {
-    const r = await fetch('/api/report/daily');
+    // Initial fetch to get shifts/khoas
+    if (reportState.shifts.length === 0) {
+      const r0 = await fetch('/api/report/daily');
+      const d0 = await r0.json();
+      reportState.shifts = d0.shifts || [];
+      reportState.khoas = d0.khoas || [];
+    }
+    const qs = new URLSearchParams();
+    if (reportState.ca) qs.set('ca', reportState.ca);
+    if (reportState.khoa) qs.set('khoa', reportState.khoa);
+    const url = '/api/report/daily' + (qs.toString() ? '?' + qs : '');
+    const r = await fetch(url);
     const data = await r.json();
+    // Filter UI
     let html = '<h3 style="color:#00d4ff;margin-top:0">Bao cao theo ngay</h3>';
-    html += '<p style="color:#888">Tong: ' + data.total_nvs + ' luot NV x ' + data.days.length + ' ngay</p>';
+    html += '<div style="display:flex;gap:8px;margin:10px 0;align-items:center">';
+    html += '<label>Ca: <select id="f-ca" style="padding:4px;background:#0a1220;color:#e0e0e0;border:1px solid #2a3a5a;border-radius:4px">';
+    html += '<option value="">-- Tat ca --</option>';
+    for (const s of reportState.shifts) {
+      const sel = s.id === reportState.ca ? ' selected' : '';
+      html += '<option value="' + s.id + '"' + sel + '>' + s.name + '</option>';
+    }
+    html += '</select></label>';
+    html += '<label>Khoa: <select id="f-khoa" style="padding:4px;background:#0a1220;color:#e0e0e0;border:1px solid #2a3a5a;border-radius:4px">';
+    html += '<option value="">-- Tat ca --</option>';
+    for (const k of reportState.khoas) {
+      const sel = k === reportState.khoa ? ' selected' : '';
+      html += '<option value="' + k + '"' + sel + '>' + k + '</option>';
+    }
+    html += '</select></label>';
+    html += '<button onclick="applyReportFilter()" style="padding:4px 12px;background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer">Ap dung</button>';
+    if (reportState.ca || reportState.khoa) {
+      html += '<button onclick="resetReportFilter()" style="padding:4px 12px;background:#666;color:#fff;border:none;border-radius:4px;cursor:pointer">Xoa loc</button>';
+    }
+    html += '</div>';
+    html += '<p style="color:#888">Tong: ' + data.total_nvs + ' luot NV x ' + data.days.length + ' ngay';
+    if (data.filters && (data.filters.ca || data.filters.khoa)) {
+      html += ' (loc: ' + (data.filters.ca || '*') + ' / ' + (data.filters.khoa || '*') + ')';
+    }
+    html += '</p>';
     for (const day of data.days.slice(0, 30)) {
       html += '<h4 style="color:#5fff7f;margin:10px 0 5px">' + day.date + ' (' + day.nvs.length + ' NV)</h4>';
       html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
-      html += '<tr style="background:#1a2a3a"><th style="padding:4px;text-align:left">Ma NV</th><th>Check-In</th><th>Check-Out</th><th>Gio</th><th>Ca</th><th>TT</th><th>Thiet bi</th></tr>';
+      html += '<tr style="background:#1a2a3a"><th style="padding:4px;text-align:left">Ma NV</th><th>Khoa</th><th>Ca</th><th>Check-In</th><th>Check-Out</th><th>Gio</th><th>TT</th><th>Thiet bi</th></tr>';
       for (const nv of day.nvs) {
         const statusColor = nv.status === 'Complete' ? '#5fff7f' : '#ffd700';
+        const caColor = ({'morning':'#ffd166','afternoon':'#06d6a0','evening':'#118ab2','night':'#073b4c'})[nv.ca] || '#888';
         html += '<tr style="border-top:1px solid #2a3a5a"><td style="padding:4px">' + nv.user_id + '</td>';
+        html += '<td style="font-size:11px;color:#aaa">' + (nv.khoa||'') + '</td>';
+        html += '<td style="color:' + caColor + ';font-size:11px">' + (nv.ca_name||'') + '</td>';
         html += '<td>' + nv.first_in + '</td><td>' + nv.last_out + '</td>';
-        html += '<td>' + nv.hours_worked + 'h</td><td>' + nv.complete_shifts + '</td>';
+        html += '<td>' + nv.hours_worked + 'h</td>';
         html += '<td style="color:' + statusColor + '">' + nv.status + '</td>';
         html += '<td style="font-size:10px;color:#888">' + nv.devices.join(',') + '</td></tr>';
       }
@@ -1311,6 +1443,11 @@ async function openReport() {
     }
     if (data.days.length > 30) html += '<p style="color:#888">... va ' + (data.days.length - 30) + ' ngay khac</p>';
     document.getElementById('reportContent').innerHTML = html;
+    // Re-attach event handlers for filters
+    const fca = document.getElementById('f-ca');
+    const fkhoa = document.getElementById('f-khoa');
+    if (fca) fca.onchange = () => { reportState.ca = fca.value; };
+    if (fkhoa) fkhoa.onchange = () => { reportState.khoa = fkhoa.value; };
   } catch (e) {
     document.getElementById('reportContent').innerHTML = '<p style="color:#f88">Loi: ' + e.message + '</p>';
   }
@@ -1556,10 +1693,48 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_live_page()
         elif path == '/api/diag':
             self._handle_diag()
+        elif path == '/security':
+            self._handle_security_page()
+        elif path == '/punch':
+            self._handle_punch_page()
+        elif path == '/api/security/scan':
+            self._handle_security_scan()
+        elif path.startswith('/api/security/device/') and path.endswith('/verify'):
+            parts = path.split('/')
+            ip = parts[4] if len(parts) > 4 else ''
+            qs = self._parse_qs()
+            pin = qs.get('pin', [''])[0]
+            password = qs.get('password', [''])[0]
+            self._handle_security_verify(ip, pin, password)
+        elif path.startswith('/api/security/device/') and path.endswith('/attlog-count'):
+            parts = path.split('/')
+            ip = parts[4] if len(parts) > 4 else ''
+            self._handle_attlog_count(ip)
+        elif path == '/api/punch/manual':
+            data = self._read_json_body()
+            self._handle_punch_manual(data)
         elif path == '/api/merge':
             self._handle_merge()
         elif path.startswith('/api/merge/today'):
             self._handle_merge_today()
+        elif path == '/api/alerts/missing' or path == '/api/alerts':
+            self._handle_alerts_missing()
+        elif path == '/alerts' or path == '/alerts.html':
+            self._handle_alerts_page()
+        elif path == '/api/backup/status':
+            # List existing backups
+            backup_root = os.path.join(SCRIPT_DIR, 'backups')
+            backups = []
+            if os.path.exists(backup_root):
+                for d in sorted(os.listdir(backup_root), reverse=True):
+                    full = os.path.join(backup_root, d)
+                    if os.path.isdir(full):
+                        files = os.listdir(full)
+                        size = sum(os.path.getsize(os.path.join(full, f)) for f in files
+                                   if os.path.isfile(os.path.join(full, f)))
+                        backups.append({'date': d, 'files': len(files), 'size_mb': round(size/1024/1024, 2),
+                                        'file_names': files})
+            self.send_json({'backups': backups[:30], 'root': backup_root})
         else:
             self.send_response(404)
             self.end_headers()
@@ -1658,6 +1833,12 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_merge_mark_done(data)
         elif path == '/api/merge/clear-old':
             self._handle_merge_clear_old(data)
+        elif path == '/api/punch/manual':
+            try:
+                body = json.loads(raw) if raw else {}
+            except:
+                body = {}
+            self._handle_punch_manual(body)
         elif path == '/api/devices/save':
             # Save devices_state from frontend
             devs = data.get('devices', [])
@@ -1669,6 +1850,10 @@ class Handler(BaseHTTPRequestHandler):
                     d_old['selected'] = d_new.get('selected', d_old['selected'])
             save_devices()
             self.send_json({'ok': True, 'message': 'Da luu'})
+        elif path == '/api/backup/now':
+            # Manual backup trigger
+            ok, msg, count, files = _do_backup_now()
+            self.send_json({'ok': ok, 'message': msg, 'count': count, 'files': files})
         else:
             self.send_response(404)
             self.end_headers()
@@ -1680,6 +1865,21 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body.encode('utf-8'))))
         self.end_headers()
         self.wfile.write(body.encode('utf-8'))
+
+    def _parse_qs(self):
+        from urllib.parse import parse_qs, urlparse
+        parsed = urlparse(self.path)
+        return parse_qs(parsed.query)
+
+    def _read_json_body(self):
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            if length > 0:
+                body = self.rfile.read(length)
+                return json.loads(body.decode('utf-8'))
+        except Exception:
+            pass
+        return {}
 
     def _calculate_shift_pairs(self, records_for_nv):
         """Pair In/Out events for a single NV on a single day.
@@ -1717,15 +1917,167 @@ class Handler(BaseHTTPRequestHandler):
             pairs.append((last_in, None, None))  # Incomplete
         return pairs
 
-    def _handle_daily_report(self):
-        """Build daily report: for each NV on each day, calculate total hours worked."""
+    def _parse_filters(self):
+        """Parse ca/khoa filter from query string."""
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        return {
+            'ca': (qs.get('ca', [''])[0] or '').lower().strip(),
+            'khoa': (qs.get('khoa', [''])[0] or '').strip(),
+            'date_from': (qs.get('date_from', [''])[0] or '').strip(),
+            'date_to': (qs.get('date_to', [''])[0] or '').strip(),
+        }
+
+    def _handle_alerts_missing(self):
+        """NV không có check-in trong ngày hôm nay (sau 8h sáng).
+        Returns list of missing users based on those who punched yesterday or recent days.
+        Also includes 'forgot checkout' alerts (in but no out by 22h).
+        """
         from collections import defaultdict
+        from datetime import datetime
+        today = datetime.now().strftime('%Y-%m-%d')
+        now_h = datetime.now().hour
+        now_m = datetime.now().minute
+        # Active users = who punched in last 7 days
+        from datetime import timedelta
+        cutoff_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+        active_users = set()
+        for r in all_records:
+            if r.get('date', '') >= cutoff_date:
+                active_users.add(str(r.get('user_id', '')))
+        # Today's punches
+        today_recs = [r for r in all_records if r.get('date') == today]
+        today_users_in = set(str(r.get('user_id', '')) for r in today_recs if r.get('status') == 0)
+        today_users_out = set(str(r.get('user_id', '')) for r in today_recs if r.get('status') == 1)
+        # Alerts
+        missing_checkin = sorted(active_users - today_users_in)
+        # Forgot checkout: punched in but no out (after 22h)
+        forgot_checkout = []
+        if now_h >= 22:
+            forgot_checkout = sorted(today_users_in - today_users_out)
+        # User names from devices.csv notes (best-effort)
+        # Note: this app doesn't have user names - they come from ZK directly.
+        # For alerts we just return user_id.
+        result = {
+            'date': today,
+            'now': datetime.now().strftime('%H:%M:%S'),
+            'active_users': len(active_users),
+            'punched_today': len(today_users_in),
+            'missing_checkin': missing_checkin,
+            'missing_count': len(missing_checkin),
+            'forgot_checkout': forgot_checkout,
+            'forgot_count': len(forgot_checkout),
+            'thresholds': {
+                'missing_checkin_alert_after': '08:00',
+                'forgot_checkout_alert_after': '22:00',
+                'active_window_days': 7,
+            }
+        }
+        # If time before 8h, don't show missing_checkin
+        if now_h < 8:
+            result['warning'] = 'Truoc 8:00, chua canh bao missing check-in'
+        self.send_json(result)
+
+    def _handle_alerts_page(self):
+        """Trang alerts rieng - UI cho NV quen cham."""
+        page = '''<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><title>Alerts - NV quên chấm</title>
+<style>
+body{font-family:Segoe UI,Arial;margin:0;padding:24px;background:#f5f5f5}
+h1{color:#d32f2f}.card{background:#fff;padding:20px;border-radius:8px;margin-bottom:16px;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+.kpi{display:flex;gap:16px;margin-bottom:16px}.kpi-item{flex:1;padding:16px;background:#fff;border-radius:8px;text-align:center;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+.kpi-num{font-size:32px;font-weight:bold;color:#1976d2}.kpi-label{color:#666;margin-top:8px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden}
+th,td{padding:10px;text-align:left;border-bottom:1px solid #eee}
+th{background:#1976d2;color:#fff;font-weight:500}
+tr:hover{background:#f5f5f5}
+.red{color:#d32f2f;font-weight:bold}
+.btn{padding:8px 16px;background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:8px}
+.btn:hover{background:#1565c0}
+.warning{background:#fff3cd;padding:12px;border-radius:4px;border-left:4px solid #ffc107}
+</style></head><body>
+<h1>⚠️ Alerts - NV Quên Chấm Công</h1>
+<div id="warning" style="display:none" class="warning"></div>
+<div class="kpi">
+  <div class="kpi-item"><div class="kpi-num" id="kpi-active">-</div><div class="kpi-label">NV hoạt động (7 ngày)</div></div>
+  <div class="kpi-item"><div class="kpi-num" id="kpi-punched">-</div><div class="kpi-label">Đã chấm hôm nay</div></div>
+  <div class="kpi-item"><div class="kpi-num red" id="kpi-missing">-</div><div class="kpi-label">Quên check-in</div></div>
+  <div class="kpi-item"><div class="kpi-num red" id="kpi-forgot">-</div><div class="kpi-label">Quên check-out</div></div>
+</div>
+<button class="btn" onclick="loadAlerts()">🔄 Refresh</button>
+<button class="btn" onclick="exportCSV()">📥 Xuất CSV</button>
+<div class="card">
+  <h2>⚠️ NV Quên Check-in</h2>
+  <table id="missing-table"><thead><tr><th>PIN</th></tr></thead><tbody></tbody></table>
+</div>
+<div class="card">
+  <h2>⚠️ NV Quên Check-out (sau 22h)</h2>
+  <table id="forgot-table"><thead><tr><th>PIN</th></tr></thead><tbody></tbody></table>
+</div>
+<script>
+async function loadAlerts(){
+  const r = await fetch('/api/alerts/missing');
+  const d = await r.json();
+  document.getElementById('kpi-active').textContent = d.active_users;
+  document.getElementById('kpi-punched').textContent = d.punched_today;
+  document.getElementById('kpi-missing').textContent = d.missing_count;
+  document.getElementById('kpi-forgot').textContent = d.forgot_count;
+  document.getElementById('now').textContent = d.now;
+  const m = document.getElementById('missing-table').querySelector('tbody');
+  m.innerHTML = '';
+  d.missing_checkin.forEach(pin => {
+    const tr = document.createElement('tr'); tr.innerHTML = `<td class="red">${pin}</td>`; m.appendChild(tr);
+  });
+  const f = document.getElementById('forgot-table').querySelector('tbody');
+  f.innerHTML = '';
+  d.forgot_checkout.forEach(pin => {
+    const tr = document.createElement('tr'); tr.innerHTML = `<td class="red">${pin}</td>`; f.appendChild(tr);
+  });
+  const w = document.getElementById('warning');
+  if(d.warning){w.style.display='block';w.textContent=d.warning;}else{w.style.display='none';}
+}
+function exportCSV(){
+  let csv='PIN\\n';
+  document.querySelectorAll('#missing-table tbody tr').forEach(r=>{csv+=r.cells[0].textContent+'\\n';});
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='missing_checkin_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+}
+loadAlerts();
+setInterval(loadAlerts, 60000);  // Refresh every 60s
+</script></body></html>'''
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        body = page.encode('utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_daily_report(self):
+        """Build daily report: for each NV on each day, calculate total hours worked.
+        Filters: ?ca=morning/afternoon/evening/night, ?khoa=Khoa1
+        """
+        from collections import defaultdict
+        filters = self._parse_filters()
+        ca_filter = filters['ca']  # 'morning' / 'afternoon' / 'evening' / 'night' or ''
+        khoa_filter = filters['khoa']  # e.g. 'Khoa 1' or ''
+
         report = defaultdict(lambda: defaultdict(list))  # date -> nv -> [records]
         for r in all_records:
             d = r.get('date', '')
             nv = str(r.get('user_id', ''))
-            if d and nv:
-                report[d][nv].append(r)
+            if not (d and nv):
+                continue
+            # Filter by ca (based on time)
+            if ca_filter:
+                rc_ca = _detect_ca(r.get('time', ''))
+                if rc_ca != ca_filter:
+                    continue
+            # Filter by khoa (based on device_ip)
+            if khoa_filter:
+                rc_khoa = _khoa_from_device(r.get('device_ip', ''))
+                if rc_khoa != khoa_filter:
+                    continue
+            report[d][nv].append(r)
         # Build summary
         summary = []
         for date in sorted(report.keys(), reverse=True):
@@ -1741,8 +2093,10 @@ class Handler(BaseHTTPRequestHandler):
                 check_outs = sum(1 for r in recs if r.get('status') == 1)
                 first_in = min((r.get('time', '') for r in recs if r.get('status') == 0), default='')
                 last_out = max((r.get('time', '') for r in recs if r.get('status') == 1), default='')
-                # Determine devices
                 devices = list(set(r.get('device_ip', '') for r in recs))
+                # Ca inferred from first check-in time
+                nv_ca = _detect_ca(first_in) if first_in else None
+                khoa = _khoa_from_device(devices[0]) if devices else 'N/A'
                 day_data['nvs'].append({
                     'user_id': nv,
                     'punches': len(recs),
@@ -1754,10 +2108,19 @@ class Handler(BaseHTTPRequestHandler):
                     'shifts': len(pairs),
                     'complete_shifts': sum(1 for p in pairs if p[2] is not None),
                     'devices': devices,
+                    'khoa': khoa,
+                    'ca': nv_ca,
+                    'ca_name': SHIFTS.get(nv_ca, {}).get('name', '') if nv_ca else '',
                     'status': 'Complete' if not any(p[2] is None for p in pairs) and len(pairs) > 0 else 'Incomplete',
                 })
             summary.append(day_data)
-        self.send_json({'days': summary, 'total_nvs': sum(len(d['nvs']) for d in summary)})
+        self.send_json({
+            'days': summary,
+            'total_nvs': sum(len(d['nvs']) for d in summary),
+            'filters': {'ca': ca_filter, 'khoa': khoa_filter},
+            'shifts': [{'id': k, 'name': v['name']} for k, v in SHIFTS.items()],
+            'khoas': _list_khoa(),
+        })
 
     def _handle_today_report(self):
         """Build today's attendance report with NVs in/out/missing status."""
@@ -2592,6 +2955,93 @@ def rewrite_csv(path, rows):
             w.writerow(r)
 
 
+def _do_backup_now():
+    """Auto backup ZKDB.db + config + CSVs to backups/YYYY-MM-DD/.
+    Returns (ok, message, file_count).
+    """
+    import shutil
+    from datetime import datetime
+    backup_root = os.path.join(SCRIPT_DIR, 'backups')
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    backup_dir = os.path.join(backup_root, date_str)
+    os.makedirs(backup_dir, exist_ok=True)
+    ts = datetime.now().strftime('%H%M%S')
+    files_to_copy = [
+        ('config.json', 'config.json'),
+        ('devices.csv', 'devices.csv'),
+        ('pending_punches.csv', 'pending_punches.csv'),
+        ('synced_punches.csv', 'synced_punches.csv'),
+        ('failed_punches.csv', 'failed_punches.csv'),
+        ('manual_punches.csv', 'manual_punches.csv'),
+    ]
+    # Optional ZKDB.db (large, only if exists)
+    zkdb_paths = [
+        os.path.join(SCRIPT_DIR, 'zk_data_extracted', 'ZKDB.db'),
+        os.path.join('D:\\chamcong', 'zk_data_extracted', 'ZKDB.db'),
+        os.path.join('C:\\Users\\drkro\\Desktop', 'zk_data_extracted', 'ZKDB.db'),
+    ]
+    for zp in zkdb_paths:
+        if os.path.exists(zp):
+            files_to_copy.append((zp, f'ZKDB_{date_str}.db'))
+            break
+    count = 0
+    copied = []
+    for src, dst_name in files_to_copy:
+        if not os.path.exists(src):
+            continue
+        dst = os.path.join(backup_dir, dst_name)
+        try:
+            shutil.copy2(src, dst)
+            count += 1
+            copied.append(dst_name)
+        except Exception as e:
+            print(f"  Backup ERR {src}: {e}")
+    # Cleanup: keep only last 30 backups
+    try:
+        if os.path.exists(backup_root):
+            all_backups = sorted([d for d in os.listdir(backup_root)
+                                   if os.path.isdir(os.path.join(backup_root, d))])
+            for old_dir in all_backups[:-30]:
+                shutil.rmtree(os.path.join(backup_root, old_dir), ignore_errors=True)
+    except Exception as e:
+        print(f"  Backup cleanup ERR: {e}")
+    msg = f"Backed up {count} files to {backup_dir} (ts={ts})"
+    return count > 0, msg, count, copied
+
+
+def _backup_scheduler():
+    """Background thread: backup daily at 0h05."""
+    import time
+    from datetime import datetime, timedelta
+    last_backup_date = None
+    while True:
+        try:
+            now = datetime.now()
+            today = now.strftime('%Y-%m-%d')
+            # Run backup if not done today and past 00:05
+            if today != last_backup_date and (now.hour > 0 or (now.hour == 0 and now.minute >= 5)):
+                ok, msg, count, files = _do_backup_now()
+                if ok:
+                    last_backup_date = today
+                    print(f"[BACKUP {now.strftime('%H:%M:%S')}] {msg}")
+                else:
+                    print(f"[BACKUP {now.strftime('%H:%M:%S')}] No files to backup")
+                    last_backup_date = today  # Mark anyway to retry next day
+        except Exception as e:
+            print(f"[BACKUP ERR] {e}")
+        # Sleep 5 minutes between checks
+        time.sleep(300)
+
+
+# === Attach security/punch routes (v1.8+) ===
+try:
+    from security_routes import attach_security_routes
+    attach_security_routes(Handler)
+    print('[OK] Security & Manual Punch routes attached')
+except ImportError as e:
+    print(f'[!] security_routes.py not found: {e}')
+
+
 def main():
     print('=' * 60)
     print('ATTENDANCE LOG VIEWER - BVDK NINH THUAN')
@@ -2620,6 +3070,15 @@ def main():
     port = 8080
     server = HTTPServer(('0.0.0.0', port), Handler)
     print('[OK] Server ready on port {0}'.format(port))
+
+    # Start auto backup scheduler (daily at 00:05)
+    backup_thread = threading.Thread(target=_backup_scheduler, daemon=True)
+    backup_thread.start()
+    print('[OK] Auto backup scheduler started (daily 00:05)')
+
+    # Manual backup endpoint
+    print('[OK] Backup endpoint: POST /api/backup/now -> trigger manual backup')
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:

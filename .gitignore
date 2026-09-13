@@ -28,6 +28,19 @@ manual_punches.csv
 sync_state.json
 scan_result.txt
 
+# Auto backup directory (created by attendance_web.py daily)
+backups/
+
+# Test scripts
+test_attlog.py
+test_attlog2.py
+test_imports.py
+
+# Backup files
+attendance_web_v157_backup.py
+*.bak
+*.pyc
+
 # APK binaries (use GitHub Releases for distribution)
 /apk/
 /dist/
