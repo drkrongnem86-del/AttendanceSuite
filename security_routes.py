@@ -587,7 +587,32 @@ Hiện cả máy không reachable
 
 <div class="card">
 <h2>📜 Log chấm công thủ công (manual_punches.csv)</h2>
-<button class="btn btn-refresh" onclick="loadLog()">🔄 Refresh log</button>
+
+<div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
+<button class="btn btn-refresh" onclick="loadLog()">🔄 Refresh</button>
+<label style="margin:0; font-size:13px;">
+    Lọc máy:
+    <select id="logFilterIp" onchange="loadLog()" style="width:auto; display:inline-block; margin:0 4px;">
+        <option value="">-- Tất cả --</option>
+    </select>
+</label>
+<label style="margin:0; font-size:13px;">
+    Số dòng:
+    <select id="logLimitSel" onchange="loadLog()" style="width:auto; display:inline-block; margin:0 4px;">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+        <option value="500">500</option>
+    </select>
+</label>
+<label style="margin:0; font-size:13px;">
+    <input type="checkbox" id="logAutoRefresh" checked onchange="toggleLogAutoRefresh()" style="width:auto; margin:0 4px;">
+    Auto-refresh mỗi 10s
+</label>
+<span id="logStats" style="font-size:12px; color:#888;"></span>
+</div>
+
 <div id="logTable"></div>
 </div>
 
@@ -697,19 +722,20 @@ async function punch(type) {{
             }} catch (e) {{ console.warn('baseline capture failed', e); }}
 
             result.className = 'result ok';
-            // BYPASS FW 6.60: BS-confirmed = ghi nhận chấm công. Auto-bump baseline +1.
-            // Log: 'verified' với written_to_device=true (BS đã verify OK)
-            stopAttlogPoll();  // Không cần poll nữa - đã ghi nhận
+            // BYPASS FW 6.60: BS-confirmed = ghi nhận chấm công.
+            // Delta tracking dùng REAL ATTLOG count từ máy thật (không fake).
+            // BS-confirmed vẫn record trong CSV, ATTLOG trên máy chỉ tăng nếu NV punch thật.
+            stopAttlogPoll();
 
             let html = `<strong>✅ ${{data.message}}</strong>`;
             html += `<div style="margin-top:10px; padding:10px; background:#e8f5e9; border-radius:6px; font-size:14px; border-left: 4px solid #10b981;">
-                🎯 <strong>BYPASS FW 6.60:</strong> BS verify OK = coi như đã chấm công.<br>
+                🎯 <strong>BYPASS FW 6.60:</strong> BS verify OK = ghi nhận chấm công.<br>
                 📝 Log: <code>${{data.name}} (PIN ${{data.pin}})</code> đã ghi vào <code>manual_punches.csv</code> với <code>written_to_device=true</code><br>
-                📊 <strong>Delta: +1 (simulated)</strong> - ATTLOG baseline đã bump
+                📊 <strong>Baseline từ ${{ip}} (thật):</strong> ${{baseline}} records
             </div>`;
             html += `<div style="margin-top:8px; padding:8px; background:#fff3cd; border-radius:4px; font-size:12px;">
-                ⚠️ Lưu ý: máy ZK <strong>CHƯA ghi ATTLOG thật</strong> (firmware 6.60 chặn). Chỉ log hệ thống đã record.
-                Nếu cần ATTLOG trên máy thật → NV đứng trước máy gõ PIN+password.
+                ⚠️ Delta hiện tại = 0 (NV chưa punch trên máy). BS đã ghi nhận vào log hệ thống.<br>
+                Nếu NV punch trên máy thật → bấm "Check ATTLOG" sẽ thấy Delta +1 từ máy thật.
             </div>`;
             if (data.instructions) {{
                 html += '<ol style="font-size:13px; color:#555;">';
@@ -720,23 +746,20 @@ async function punch(type) {{
             // Auto-load log after success
             setTimeout(loadLog, 500);
 
-            // BYPASS: Fake Delta=+1 bằng cách bump baseline ngay
+            // Baseline lưu REAL count từ máy thật (không fake +1)
             if (baseline !== '?') {{
-                const newBaseline = baseline + 1;
                 localStorage.setItem('attlog_baseline_' + ip, JSON.stringify({{
-                    count: newBaseline, time: new Date().toISOString(),
-                    pin, name: data.name, bypass: true
+                    count: baseline, time: new Date().toISOString(),
+                    pin, name: data.name, real_machine: ip
                 }}));
-                // Hiển thị ATTLOG card với Delta=+1 ngay
+                // Hiển thị ATTLOG card với baseline THẬT
                 document.getElementById('attlogResult').className = 'result ok';
                 document.getElementById('attlogResult').style.display = 'block';
                 document.getElementById('attlogResult').innerHTML = `
-<div class="attlog-status attlog-ok">📊 ATTLOG: (chưa check) - baseline đã bump lên ${{newBaseline}}</div>
-<div style="margin-top:8px; padding:8px; background:#e8f5e9; border-radius:4px; font-size:13px; border-left: 4px solid #10b981;">
-    ✅ Delta: <strong>+1 (simulated)</strong> - ${{data.name}} đã được ghi nhận bởi BS
-</div>
-<div style="font-size:11px;color:#888;margin-top:4px;">
-    💡 Bấm "Check ATTLOG Count" để xác nhận máy đã ghi thật (optional)
+<div class="attlog-status">📊 Baseline từ máy thật <code>${{ip}}</code>: <strong>${{baseline}}</strong> records</div>
+<div style="margin-top:8px; padding:8px; background:#f5f7fa; border-radius:4px; font-size:13px;">
+    📌 <strong>Delta hiện tại: 0</strong> - BS đã verify OK, log đã ghi nhận.<br>
+    💡 Bấm "Check ATTLOG Count" để xem NV đã punch trên máy thật chưa (Delta sẽ là +1 nếu có).
 </div>
                 `;
             }}
@@ -968,48 +991,109 @@ function stopAttlogPoll() {{
     }}
 }}
 
-// ===== Load manual_punches.csv =====
+// ===== Load manual_punches.csv (with filter + stats) =====
 async function loadLog() {{
     const tbl = document.getElementById('logTable');
+    const stats = document.getElementById('logStats');
+    const filterIp = document.getElementById('logFilterIp')?.value || '';
+    const limit = document.getElementById('logLimitSel')?.value || 50;
     try {{
-        const r = await fetch('/api/punch/log');
+        const r = await fetch('/api/punch/log?limit=' + limit);
         const data = await r.json();
-        if (data.ok && data.log && data.log.length > 0) {{
-            let html = '<table><thead><tr>';
-            html += '<th>Thời gian</th><th>Máy</th><th>PIN</th><th>Tên NV</th><th>Loại</th><th>Trạng thái</th><th>Ghi máy?</th>';
+        if (!data.ok) {{
+            tbl.innerHTML = '<p style="color:#c62828;">❌ Lỗi: ' + (data.error || 'unknown') + '</p>';
+            return;
+        }}
+        let logs = data.log || [];
+
+        // Update filter dropdown with unique IPs
+        const ipSel = document.getElementById('logFilterIp');
+        if (ipSel) {{
+            const currentVal = ipSel.value;
+            const allIps = [...new Set(logs.map(l => l.device_ip))].sort();
+            ipSel.innerHTML = '<option value="">-- Tất cả (' + allIps.length + ' máy) --</option>' +
+                allIps.map(ip => `<option value="${{ip}}">${{ip}}</option>`).join('');
+            if (allIps.includes(currentVal)) ipSel.value = currentVal;
+            else if (filterIp) ipSel.value = filterIp;
+        }}
+
+        // Apply IP filter
+        if (filterIp) {{
+            logs = logs.filter(l => l.device_ip === filterIp);
+        }}
+
+        // Stats
+        const totalAll = data.count || 0;
+        const today = new Date().toISOString().slice(0, 10);
+        const todayCount = logs.filter(l => l.timestamp && l.timestamp.startsWith(today)).length;
+        const inCount = logs.filter(l => l.type === 'in').length;
+        const outCount = logs.filter(l => l.type === 'out').length;
+        const bsCount = logs.filter(l => l.written_to_device === 'true').length;
+        if (stats) {{
+            stats.innerHTML = `
+                📊 Tổng: <strong>${{totalAll}}</strong> |
+                Hiện: <strong>${{logs.length}}</strong> |
+                Hôm nay: <strong>${{todayCount}}</strong> |
+                IN: <strong style="color:#10b981;">${{inCount}}</strong> |
+                OUT: <strong style="color:#f59e0b;">${{outCount}}</strong> |
+                BS-confirmed: <strong style="color:#00695c;">${{bsCount}}</strong>
+            `;
+        }}
+
+        if (logs.length > 0) {{
+            let html = '<div style="overflow-x:auto;"><table><thead><tr>';
+            html += '<th>Thời gian</th><th>Máy</th><th>PIN</th><th>Tên NV</th><th>Loại</th><th>Trạng thái</th><th>Ghi máy?</th><th>Note</th>';
             html += '</tr></thead><tbody>';
-            data.log.forEach(r => {{
+            logs.forEach(r => {{
                 const wDev = r.written_to_device || '';
                 const wDevDisplay = wDev === 'true'
-                    ? '<span class="status-verified" title="BS-confirmed bypass">✅ BS-confirmed</span>'
+                    ? '<span class="status-verified" title="BS đã verify - bypass FW 6.60">✅ BS-confirmed</span>'
                     : (wDev === 'false' || wDev === ''
                         ? '<span style="color:#f59e0b;">⏳ Pending</span>'
                         : '<span style="color:#888;">' + wDev + '</span>');
+                const typeColor = r.type === 'in' ? '#10b981' : '#f59e0b';
+                const typeIcon = r.type === 'in' ? '🟢 IN' : '🟡 OUT';
                 html += '<tr>';
                 html += '<td>' + new Date(r.timestamp).toLocaleString('vi-VN') + '</td>';
-                html += '<td>' + r.device_ip + '</td>';
-                html += '<td>' + r.pin + '</td>';
+                html += '<td><code style="font-size:11px;">' + r.device_ip + '</code></td>';
+                html += '<td><strong>' + r.pin + '</strong></td>';
                 html += '<td>' + r.name + '</td>';
-                html += '<td>' + r.type + '</td>';
+                html += '<td style="color:' + typeColor + '; font-weight:600;">' + typeIcon + '</td>';
                 html += '<td class="status-verified">✅ ' + r.status + '</td>';
                 html += '<td>' + wDevDisplay + '</td>';
+                html += '<td style="font-size:11px; color:#888;">' + (r.note || '') + '</td>';
                 html += '</tr>';
             }});
-            html += '</tbody></table>';
-            html += '<p style="color:#888;font-size:12px;margin-top:8px;">Hiển thị ' + data.log.length + ' records. <strong>BYPASS FW 6.60:</strong> BS-confirmed = ghi nhận (ATTLOG trên máy chưa tăng thật).</p>';
+            html += '</tbody></table></div>';
+            html += '<p style="color:#888;font-size:11px;margin-top:8px;">ℹ️ <strong>BYPASS FW 6.60:</strong> BS verify OK = ghi nhận (ATTLOG trên máy chưa tăng thật - vì firmware chặn).</p>';
             tbl.innerHTML = html;
         }} else {{
-            tbl.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">Chưa có log chấm công thủ công nào.</p>';
+            tbl.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">Không có log nào khớp filter. Thử chọn máy khác hoặc bỏ filter.</p>';
         }}
     }} catch (e) {{
         tbl.innerHTML = '<p style="color:#c62828;">❌ Lỗi load log: ' + e + '</p>';
     }}
 }}
 
-// Auto-load log on page open + refresh every 10s
+function toggleLogAutoRefresh() {{
+    const chk = document.getElementById('logAutoRefresh');
+    if (chk.checked) {{
+        logRefreshTimer = setInterval(loadLog, 10000);
+        console.log('Log auto-refresh ON');
+    }} else {{
+        if (logRefreshTimer) clearInterval(logRefreshTimer);
+        logRefreshTimer = null;
+        console.log('Log auto-refresh OFF');
+    }}
+}}
+
+// Auto-load log on page open + refresh every 10s (if toggle is on)
 window.addEventListener('DOMContentLoaded', () => {{
     loadLog();
-    logRefreshTimer = setInterval(loadLog, 10000);
+    const chk = document.getElementById('logAutoRefresh');
+    if (chk && chk.checked) {{
+        logRefreshTimer = setInterval(loadLog, 10000);
+    }}
     // Auto-scan reachable devices on page load
     scanReachable();
 }});
