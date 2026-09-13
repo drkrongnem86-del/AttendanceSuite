@@ -333,6 +333,42 @@ setInterval(loadScan, 30000);  // auto refresh 30s
         except Exception as e:
             self.send_json({'ok': False, 'ip': ip, 'error': str(e)}, status=500)
 
+    # === API: /api/punch/reachable - Quick TCP probe port 4370 for all devices ===
+    def _handle_punch_reachable(self):
+        """Quick TCP probe port 4370 in parallel - returns reachable devices.
+        Dùng để filter dropdown chỉ hiển thị máy reachable từ subnet hiện tại.
+        Không gọi pyzk (chỉ socket.connect_ex port 4370 với timeout 1s) -> nhanh (~3s cho 22 máy).
+        """
+        import concurrent.futures as cf
+        devices = _read_devices()
+
+        def _probe(dev):
+            ip = dev['ip']
+            t0 = time.time()
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(1.5)
+                ok = s.connect_ex((ip, 4370)) == 0
+                s.close()
+                ms = round((time.time() - t0) * 1000)
+                return {**dev, 'reachable': ok, 'ping_ms': ms if ok else None}
+            except Exception as e:
+                return {**dev, 'reachable': False, 'ping_ms': None, 'error': str(e)[:50]}
+
+        # Parallel probe - 22 devices in ~3s instead of 33s sequential
+        with cf.ThreadPoolExecutor(max_workers=22) as ex:
+            results = list(ex.map(_probe, devices))
+
+        results.sort(key=lambda r: (not r['reachable'], r['note'] or r['ip']))
+        reachable = sum(1 for r in results if r['reachable'])
+        self.send_json({
+            'ok': True,
+            'reachable_count': reachable,
+            'total': len(results),
+            'devices': results,
+            'timestamp': datetime.now().isoformat(),
+        })
+
     # === API: /api/punch/manual ===
     def _handle_punch_manual(self, data):
         ip = data.get('ip', '').strip()
@@ -483,6 +519,17 @@ th {{ background: #f5f7fa; font-weight: 600; color: #555; }}
 <h1>📱 Chấm công thủ công (PIN+Password)</h1>
 <p style="color:#666; font-size:13px;">Verify PIN+Password từ xa qua pyzk. Sau khi verify OK, NV đứng trước máy ZK nhập PIN+Password để ghi ATTLOG chính thức.</p>
 
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px; flex-wrap:wrap;">
+<span id="reachableBadge" style="padding:4px 10px; background:#f5f7fa; border-radius:4px; font-size:13px;">
+🔄 Đang quét thiết bị...
+</span>
+<button class="btn btn-refresh" onclick="scanReachable()" style="flex:0;">🔍 Quét lại</button>
+<label style="margin:0; display:flex; align-items:center; gap:4px; font-size:13px;">
+<input type="checkbox" id="showAllChk" onchange="renderDeviceDropdown()" style="width:auto; margin:0;">
+Hiện cả máy không reachable
+</label>
+</div>
+
 <label>Máy ZK:</label>
 <select id="ip">{options}</select>
 
@@ -522,6 +569,55 @@ th {{ background: #f5f7fa; font-weight: 600; color: #555; }}
 <script>
 let logRefreshTimer = null;
 
+// ===== Scan reachable devices =====
+let reachableDevices = [];  // Array of {{ip, note, reachable, ping_ms}}
+async function scanReachable() {{
+    const badge = document.getElementById('reachableBadge');
+    badge.innerHTML = '🔄 Đang quét 22 máy ZK (parallel TCP probe)...';
+    badge.style.background = '#e3f2fd';
+    try {{
+        const r = await fetch('/api/punch/reachable');
+        const data = await r.json();
+        reachableDevices = data.devices || [];
+        const ok = data.reachable_count;
+        const total = data.total;
+        if (ok === 0) {{
+            badge.innerHTML = `❌ 0/${{total}} máy reachable. Kiểm tra VPN/subnet!`;
+            badge.style.background = '#fee';
+        }} else if (ok === total) {{
+            badge.innerHTML = `✅ ${{ok}}/${{total}} máy reachable (tất cả OK)`;
+            badge.style.background = '#e8f5e9';
+        }} else {{
+            badge.innerHTML = `⚠️ ${{ok}}/${{total}} máy reachable (còn lại không từ subnet này)`;
+            badge.style.background = '#fff3cd';
+        }}
+        renderDeviceDropdown();
+    }} catch (e) {{
+        badge.innerHTML = '❌ Lỗi scan: ' + e;
+        badge.style.background = '#fee';
+    }}
+}}
+
+function renderDeviceDropdown() {{
+    const sel = document.getElementById('ip');
+    const showAll = document.getElementById('showAllChk').checked;
+    const currentVal = sel.value;
+    const list = showAll ? reachableDevices : reachableDevices.filter(d => d.reachable);
+    if (list.length === 0) {{
+        sel.innerHTML = '<option value="">(không có máy nào reachable)</option>';
+        return;
+    }}
+    sel.innerHTML = list.map(d => {{
+        const status = d.reachable ? '🟢' : '🔴';
+        const ping = d.ping_ms != null ? ` (${{d.ping_ms}}ms)` : '';
+        return `<option value="${{d.ip}}">${{status}} ${{d.ip}} (${{d.note}})${{ping}}</option>`;
+    }}).join('');
+    // Try to preserve previous selection if still in list
+    if (list.find(d => d.ip === currentVal)) {{
+        sel.value = currentVal;
+    }}
+}}
+
 // ===== Punch (verify PIN+password) =====
 async function punch(type) {{
     const ip = document.getElementById('ip').value;
@@ -532,6 +628,18 @@ async function punch(type) {{
         result.className = 'result fail';
         result.style.display = 'block';
         result.innerHTML = '❌ Vui lòng nhập đầy đủ thông tin';
+        return;
+    }}
+    // Pre-check reachable
+    const dev = reachableDevices.find(d => d.ip === ip);
+    if (dev && !dev.reachable) {{
+        result.className = 'result fail';
+        result.style.display = 'block';
+        const reachableList = reachableDevices.filter(d => d.reachable).map(d => d.ip).join(', ');
+        result.innerHTML = `❌ Máy <strong>${{ip}}</strong> không reachable từ subnet hiện tại!<br>
+            🔧 Khả năng: cần VPN, máy offline, hoặc firewall chặn port 4370.<br>
+            ✅ Các máy reachable: <code>${{reachableList || '(none)'}}</code><br>
+            💡 Tick "Hiện cả máy không reachable" nếu muốn test máy khác.`;
         return;
     }}
     result.className = 'result info';
@@ -574,7 +682,12 @@ async function punch(type) {{
             setTimeout(loadLog, 1000);
         }} else {{
             result.className = 'result fail';
-            result.innerHTML = `❌ ${{data.error || 'Unknown error'}}`;
+            let errMsg = data.error || 'Unknown error';
+            if (errMsg.includes("can't reach device") || errMsg.includes("timed out") || errMsg.includes("Network")) {{
+                const reachableList = reachableDevices.filter(d => d.reachable).map(d => d.ip).join(', ');
+                errMsg += `<br>💡 <strong>Chọn máy reachable:</strong> <code>${{reachableList || 'Bấm Quét lại'}}</code>`;
+            }}
+            result.innerHTML = `❌ ${{errMsg}}`;
         }}
     }} catch (e) {{
         result.className = 'result fail';
@@ -590,6 +703,15 @@ async function checkAttlog() {{
         result.className = 'result fail';
         result.style.display = 'block';
         result.innerHTML = '❌ Chọn máy ZK trước';
+        return;
+    }}
+    // Pre-check reachable
+    const dev = reachableDevices.find(d => d.ip === ip);
+    if (dev && !dev.reachable) {{
+        result.className = 'result fail';
+        result.style.display = 'block';
+        const reachableList = reachableDevices.filter(d => d.reachable).map(d => d.ip).join(', ');
+        result.innerHTML = `❌ Máy <strong>${{ip}}</strong> không reachable!<br>✅ Máy reachable: <code>${{reachableList || '(none)'}}</code>`;
         return;
     }}
     result.className = 'result info';
@@ -653,7 +775,12 @@ Users: ${{data.users_count}} / ${{data.users_capacity}} | Check lúc: ${{new Dat
             `;
         }} else {{
             result.className = 'result fail';
-            result.innerHTML = '❌ Lỗi: ' + (data.error || 'unknown');
+            let errMsg = data.error || 'unknown';
+            if (errMsg.includes("can't reach") || errMsg.includes("timed out") || errMsg.includes("Network")) {{
+                const reachableList = reachableDevices.filter(d => d.reachable).map(d => d.ip).join(', ');
+                errMsg += `<br>💡 <strong>Chọn máy reachable:</strong> <code>${{reachableList || 'Bấm Quét lại'}}</code>`;
+            }}
+            result.innerHTML = '❌ Lỗi: ' + errMsg;
         }}
     }} catch (e) {{
         result.className = 'result fail';
@@ -708,6 +835,8 @@ async function loadLog() {{
 window.addEventListener('DOMContentLoaded', () => {{
     loadLog();
     logRefreshTimer = setInterval(loadLog, 10000);
+    // Auto-scan reachable devices on page load
+    scanReachable();
 }});
 </script>
 </body>
@@ -725,3 +854,4 @@ window.addEventListener('DOMContentLoaded', () => {{
     handler_class._handle_punch_page = _handle_punch_page
     handler_class._handle_punch_log = _handle_punch_log
     handler_class._handle_attlog_count = _handle_attlog_count
+    handler_class._handle_punch_reachable = _handle_punch_reachable

@@ -1712,6 +1712,8 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_attlog_count(ip)
         elif path == '/api/punch/log':
             self._handle_punch_log()
+        elif path == '/api/punch/reachable':
+            self._handle_punch_reachable()
         elif path == '/api/punch/manual':
             data = self._read_json_body()
             self._handle_punch_manual(data)
