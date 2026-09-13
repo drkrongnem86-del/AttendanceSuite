@@ -571,6 +571,9 @@ let logRefreshTimer = null;
 
 // ===== Scan reachable devices =====
 let reachableDevices = [];  // Array of {{ip, note, reachable, ping_ms}}
+let pollTimer = null;  // Auto-poll ATTLOG count sau khi verify
+let pollCount = 0;
+const MAX_POLLS = 24;  // 24 × 5s = 2 phút
 async function scanReachable() {{
     const badge = document.getElementById('reachableBadge');
     badge.innerHTML = '🔄 Đang quét 22 máy ZK (parallel TCP probe)...';
@@ -676,10 +679,14 @@ async function punch(type) {{
                 data.instructions.forEach(i => html += `<li>${{i}}</li>`);
                 html += '</ol>';
             }}
-            html += '<br><em>💡 Sau khi NV đã nhập PIN+password trên máy, bấm "Check ATTLOG" để xem ATTLOG đã tăng chưa.</em>';
+            html += '<br><em>💡 Hệ thống sẽ <strong>tự động kiểm tra ATTLOG mỗi 5 giây</strong> trong 2 phút. Khi NV nhập PIN+password trên máy, BS sẽ thấy ngay.</em>';
             result.innerHTML = html;
             // Auto-load log after success
             setTimeout(loadLog, 1000);
+            // Auto-poll ATTLOG count to detect when NV punches
+            if (baseline !== '?') {{
+                startAttlogPoll(ip, baseline, pin, data.name);
+            }}
         }} else {{
             result.className = 'result fail';
             let errMsg = data.error || 'Unknown error';
@@ -797,7 +804,105 @@ function resetBaseline() {{
     }}
     const key = 'attlog_baseline_' + ip;
     localStorage.removeItem(key);
+    // Stop polling
+    if (pollTimer) {{
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }}
     document.getElementById('attlogResult').innerHTML = '<p style="color:#888;">✅ Đã reset baseline cho ' + ip + '. Bấm CHECK-IN/CHECK-OUT để capture baseline mới.</p>';
+}}
+
+// ===== Auto-poll ATTLOG sau khi verify success =====
+function startAttlogPoll(ip, baselineCount, pin, name) {{
+    stopAttlogPoll();  // Clear existing
+    pollCount = 0;
+    const result = document.getElementById('attlogResult');
+    const updatePollDisplay = (c, cap, delta, status) => {{
+        const pct = cap > 0 ? ((c / cap) * 100).toFixed(1) : 0;
+        const warnClass = pct > 90 ? 'attlog-err' : (pct > 70 ? 'attlog-warn' : 'attlog-ok');
+        let deltaClass, deltaIcon, deltaMsg;
+        if (delta > 0) {{
+            deltaClass = 'attlog-ok'; deltaIcon = '✅';
+            deltaMsg = '<strong>ĐÃ GHI ATTLOG</strong> - NV đã chấm công thành công trên máy!';
+        }} else if (delta === 0) {{
+            deltaClass = 'attlog-warn'; deltaIcon = '⏳';
+            deltaMsg = 'Đang đợi NV nhập PIN+password trên máy...';
+        }} else {{
+            deltaClass = 'attlog-err'; deltaIcon = '❌';
+            deltaMsg = 'ATTLOG giảm - có thể máy rollover/sync';
+        }}
+        result.className = 'result ' + (delta > 0 ? 'ok' : 'info');
+        result.style.display = 'block';
+        result.innerHTML = `
+<div class="attlog-status ${{warnClass}}">
+📊 ATTLOG hiện tại: ${{c}} / ${{cap}} records (${{pct}}%) — <em>auto-poll #${{pollCount}}/${{MAX_POLLS}}</em>
+</div>
+<div style="margin-top:8px; padding:8px; background:#f5f7fa; border-radius:4px; font-size:13px;">
+    📌 <strong>Baseline:</strong> ${{baselineCount}} records (PIN ${{pin}} - ${{name}})
+</div>
+<div class="attlog-status ${{deltaClass}}" style="margin-top:8px;">
+    ${{deltaIcon}} Delta: <strong>${{delta > 0 ? '+' : ''}}${{delta}}</strong> records - ${{deltaMsg}}
+</div>
+<div style="margin-top:10px;">
+    <button class="btn btn-refresh" onclick="stopAttlogPoll()">⏹ Dừng auto-poll</button>
+</div>
+        `;
+    }};
+
+    // First poll immediately
+    pollCount++;
+    fetch('/api/security/device/' + ip + '/attlog-count')
+        .then(r => r.json())
+        .then(data => {{
+            if (data.ok) {{
+                const delta = data.attlog_count - baselineCount;
+                updatePollDisplay(data.attlog_count, data.attlog_capacity, delta, 'ok');
+                if (delta > 0) {{
+                    // SUCCESS! Update baseline to new count
+                    localStorage.setItem('attlog_baseline_' + ip, JSON.stringify({{
+                        count: data.attlog_count, time: new Date().toISOString(),
+                        pin, name: name
+                    }}));
+                    stopAttlogPoll();
+                }}
+            }}
+        }}).catch(e => console.warn(e));
+
+    // Continue polling
+    pollTimer = setInterval(() => {{
+        pollCount++;
+        if (pollCount > MAX_POLLS) {{
+            stopAttlogPoll();
+            return;
+        }}
+        fetch('/api/security/device/' + ip + '/attlog-count')
+            .then(r => r.json())
+            .then(data => {{
+                if (data.ok) {{
+                    const delta = data.attlog_count - baselineCount;
+                    updatePollDisplay(data.attlog_count, data.attlog_capacity, delta, 'ok');
+                    if (delta > 0) {{
+                        // SUCCESS! Update baseline
+                        localStorage.setItem('attlog_baseline_' + ip, JSON.stringify({{
+                            count: data.attlog_count, time: new Date().toISOString(),
+                            pin, name: name
+                        }}));
+                        stopAttlogPoll();
+                        // Refresh log
+                        setTimeout(loadLog, 500);
+                    }}
+                }}
+            }}).catch(e => console.warn('poll failed', e));
+    }}, 5000);
+}}
+
+function stopAttlogPoll() {{
+    if (pollTimer) {{
+        clearInterval(pollTimer);
+        pollTimer = null;
+        pollCount = 0;
+        console.log('Auto-poll stopped');
+    }}
 }}
 
 // ===== Load manual_punches.csv =====
