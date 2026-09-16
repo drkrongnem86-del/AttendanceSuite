@@ -1,4 +1,4 @@
-# AttendanceSuite v2.0.1 - Portable EXE + APK arm64
+# AttendanceSuite v2.0.2 - Portable EXE + APK arm64
 
 ## Giới thiệu
 
@@ -7,78 +7,103 @@
 **Tác giả:** Dr. Nểm (Bác sĩ Cấp cứu - BVĐK Ninh Thuận)
 **Bản quyền:** © 2026 Dr. Nểm - BVĐK Ninh Thuận
 
-## Tính năng
+## Tính năng v2.0.2
 
-### 1. AttendanceSuite.exe (Portable EXE - 12MB)
+### MỚI trong v2.0.2 (16/09/2026)
+- ✅ **Live Device Status có Search Filter** - tìm theo IP / tên / lỗi + filter chip Online/Offline/CC/KY/SIM
+- ✅ **Server/GW + Ký vân tay (KY) đã chọn được** trong Attendance Log Viewer
+- ✅ **Auto-detect device IP cho Simulator** - ưu tiên VPN subnet kết nối được
+- ✅ **Socket-level preflight ping** + 3 retries (fix 172.16.8.139 / May 20 race condition WinError 1005)
+- ✅ **Fix "Mất kết nối undefined"** trong X628 PRO Simulator (data.ip có giá trị)
+- ✅ **Fix e.message undefined** trong fetch errors + status_name crash
+
+### 1. AttendanceSuite-v2.0.2.exe (Portable EXE - 15MB)
 - ✅ Double-click → cửa sổ desktop mở ngay (pywebview + Edge WebView2)
-- ✅ 3 servers chạy ngầm trong 1 process (không spawn subprocess):
+- ✅ 2 servers chạy ngầm trong 1 process (không spawn subprocess):
   - **Viewer** :8080 - Log chấm công + báo cáo
   - **Simulator** :8081 - Mô phỏng máy X628 PRO
-  - **ATTLOG Tools API** :8080 - Inject/Delete/Edit ATTLOG (CVE-2023-3941)
 - ✅ 4 tabs UI: Đọc log / X628 Simulator / ATTLOG Tools / Live Status
 - ✅ Filter nhanh: Hôm nay / Hôm qua / Tuần này / Tháng này / Tất cả
-- ✅ Chấm công thật ghi lên ATTLOG qua web backup (CVE-2023-4587) + path traversal (CVE-2023-3941)
-- ✅ Xóa log theo marker (chọn lọc)
-- ✅ Chỉnh sửa thời gian ATTLOG
+- ✅ ATTLOG Tools: Inject / Delete / Edit Time / Real Punch qua CVE-2023-3941
+- ✅ Live Status search filter (Online/Offline/CC/KY/SIM) + search box
 - ✅ Tự động kill port cũ khi khởi động (tránh lỗi trùng port)
 - ✅ Single-instance lock (không cho mở 2 cửa sổ)
 - ✅ Force kill port khi đóng (clean shutdown)
 
-### 2. attendance-mobile-arm64-2.0.1+14.apk (APK arm64 - 17MB)
+### 2. attendance-mobile-arm64-2.0.2+15.apk (APK arm64 - 17MB)
 - ✅ Flutter mobile app cho Android arm64-v8a
 - ✅ 4 tabs: Log chấm công / X628 PRO / Chấm từ xa / **ATTLOG Tools**
 - ✅ ATTLOG Tools gọi EXE qua HTTP để inject/delete/edit
-- ✅ Signed SHA-1: `5d54b3cf8cac8f87fb841f11f6cda9a654c8f6c5`
+- ✅ Cài đè được lên mọi version trước (cùng signing cert SHA-1 `5d54b3cf...f6c5`)
 
-## Hướng dẫn sử dụng nhanh
+## Cài đặt
 
-### EXE
-1. Copy `AttendanceSuite-v2.0.1.exe` ra desktop
-2. Double-click → cửa sổ mở ngay
-3. Click tab **ATTLOG Tools** → bấm 🔄 Refresh → chọn máy (chấm xanh = online)
-4. Nhập PIN + Status → bấm **Chấm công** → đợi ~30s reboot
+### Windows EXE
+1. Copy `AttendanceSuite-v2.0.2.exe` ra Desktop
+2. Double-click → cửa sổ desktop mở ra
+3. Không cần cài đặt, không cần Python, không cần mạng (trừ khi giao tiếp thiết bị)
 
-### APK
-1. Cài APK lên Samsung A17 (arm64)
-2. Mở app → cài đặt IP của máy chạy EXE (vd: 192.168.1.101:8080)
-3. Tab **ATTLOG Tools** → chọn máy → chấm công
+### Android APK
+1. Copy `attendance-mobile-arm64-2.0.2+15.apk` sang điện thoại
+2. Mở bằng File Manager → "Cài đặt"
+3. Cho phép "Cài đặt từ nguồn không xác định" nếu được hỏi
+4. App tự nhận diện thiết bị qua VPN/Wi-Fi
 
-## Cấu trúc repo
+## Sử dụng
 
-```
-TH/
-├── README.md                         # File này
-├── AttendanceSuite-v2.0.1.exe       # Portable EXE (chạy trên Windows 10/11)
-├── attendance-mobile-arm64-2.0.1+14.apk  # APK cho Samsung A17
-├── docs/                              # Tài liệu nghiên cứu ZK
-│   ├── ZK_ATTLOG_WRITE_EXHAUSTIVE_RESEARCH_2026.md
-│   ├── ZK_CVE_2023_3941_REMOTE_ATTLOG_WRITE_CONFIRMED.md
-│   ├── ZK_RESEARCH_INDEX.md
-│   ├── K-ZkTeco-2023-001..006.md     # CVE advisories
-│   ├── X628_PRO_ADMS_ENABLE_GUIDE.md
-│   ├── X628_PRO_FLASH_DUMP_PREP.md
-│   └── ...
-└── tools/                             # ZK research tools
-    ├── zk_remote_attlog_write.py      # Production ATTLOG injection tool
-    ├── zk_arbitrary_read.py            # CVE-2023-3940
-    ├── zk_patch_binwalk*.py            # Binwalk patches for Windows
-    └── ... (100+ scripts)
-```
+### Tab 1: Đọc log chấm công
+- Tick chọn máy cần đọc (CC/KY/SV/GW đều chọn được)
+- Chọn ngày hoặc bấm "Hôm nay / Hôm qua / Tuần / Tháng / Tất cả"
+- Bấm **"Lấy log"** → tự động fetch từ web backup (nhanh) hoặc từ thiết bị (chậm)
+- "Export CSV" / "Excel" / "Báo cáo" ở góc trên
 
-## CVE được sử dụng
+### Tab 2: X628 PRO Simulator
+- Chọn máy online (chấm xanh) hoặc nhập IP thủ công
+- Nhập Mã NV + Pass (nếu cần)
+- Chọn thao tác (Check-In/Out, Break, OT) + phương thức (Vân tay/Thẻ/Mã số)
+- Bấm **"Chấm công"** → ghi local + cố gắng ghi lên máy thật
+- ⚠️ Máy X628 PRO firmware 6.60 ACK_OK nhưng KHÔNG ghi ATTLOG từ xa (đây là giới hạn firmware)
 
-- **CVE-2023-3941** (CVSS 10.0) - UPLOAD_PICTURE path traversal → arbitrary file write
-- **CVE-2023-3940** (CVSS 7.5) - READFILE path traversal → arbitrary file read
-- **CVE-2023-4587** (CVSS 9.8) - Unauthenticated backup download
-- **CVE-2023-3939** (CVSS 10.0) - Command injection (NOT exploitable trên X628 PRO FW 6.60)
+### Tab 3: ATTLOG Tools (CVE-2023-3941)
+- **Real Punch**: chấm công thật qua web backup (ghi vào ZKDB.db)
+- **Inject**: chèn bản ghi mới vào ATTLOG (cần reboot ~30s)
+- **Delete**: xóa bản ghi theo marker (đánh dấu khi inject để cleanup)
+- **Edit Time**: chỉnh sửa thời gian bản ghi đã inject
+- Tất cả thao tác đều dùng CVE-2023-3941 (UPLOAD_PICTURE path traversal + UPLOAD_USERPHOTO)
+- Backup tự động qua CVE-2023-4587 (unauth web backup download)
 
-## ZK Devices test thành công
+### Tab 4: Live Device Status
+- Auto-probe mỗi 8 giây
+- **Search filter** (input box): tìm theo IP / tên / lỗi
+- **Filter chip**: Tất cả / Online / Offline / CC / KY / SIM
+- Hiển thị latency (ms), log count, lỗi (nếu có)
 
-- May 3 (172.16.0.214) - X628 PRO FW 6.60 Dec 9 2019 - ZLM60_TFT platform
-- Web UI (172.16.254.202) - FW 6.60 May 14 2018
+## Lưu ý kỹ thuật
 
-## Yêu cầu hệ thống
+### Yêu cầu
+- **Windows 10+** cho EXE (cần WebView2 - đã có sẵn trên Windows 11)
+- **Android 7.0+** (API 24+) cho APK
+- **Mạng VPN nội bộ BVĐK Ninh Thuận** để truy cập 24 máy chấm công
+- **PIN 1 (admin)** đã được đăng ký trên máy thật
 
-- **EXE**: Windows 10/11 + Edge WebView2 (có sẵn)
-- **APK**: Android 8.0+ (arm64-v8a)
-- **Network**: Cùng LAN/VPN với máy chấm công ZK (port 4370 cho giao thức, port 80 cho web backup)
+### Thiết bị đã test (verified E2E)
+- **May 3** (172.16.0.214) - X628 PRO FW 6.60 Dec 9 2019 - CVE-2023-3941 EXPLOITED
+- **May 20** (172.16.8.139) - WinError 1005 race fix - socket-level retry
+- **Web UI** (172.16.254.202) - CVE-2023-4587 backup vulnerable
+- 21/24 thiết bị khác cần VPN để truy cập
+
+### Bảo mật
+⚠️ **Tool này khai thác CVE-2023-3941 + CVE-2023-4587 trên ZK X628 PRO FW 6.60.**
+Chỉ sử dụng trên thiết bị thuộc sở hữu của BVĐK Ninh Thuận.
+
+## Lịch sử
+
+- **v2.0.2** (16/09/2026) - Live Status search, KY/SV/GW selectable, fix Simulator undefined, socket retry
+- **v2.0.1** (16/09/2026) - Quick filter buttons, online status indicator, single-instance lock
+- **v2.0.0** (16/09/2026) - Production release: Portable EXE + APK + ATTLOG Tools
+- **v1.3.2+6** trở về trước: Early development versions
+
+## Liên hệ
+
+Dr. Nểm - Khoa Cấp cứu - BVĐK Ninh Thuận
+GitHub: https://github.com/drkrongnem86-del/AttendanceSuite
