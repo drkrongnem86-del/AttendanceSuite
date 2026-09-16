@@ -1,4 +1,4 @@
-# AttendanceSuite v2.0.2 - Portable EXE + APK arm64
+# AttendanceSuite v2.1.0 - Self-Contained APK + VPN
 
 ## Giới thiệu
 
@@ -7,101 +7,71 @@
 **Tác giả:** Dr. Nểm (Bác sĩ Cấp cứu - BVĐK Ninh Thuận)
 **Bản quyền:** © 2026 Dr. Nểm - BVĐK Ninh Thuận
 
-## Tính năng v2.0.2
+## 🚀 v2.1.0 - APK Self-Hosted + VPN (NEW!)
 
-### MỚI trong v2.0.2 (16/09/2026)
-- ✅ **Live Device Status có Search Filter** - tìm theo IP / tên / lỗi + filter chip Online/Offline/CC/KY/SIM
-- ✅ **Server/GW + Ký vân tay (KY) đã chọn được** trong Attendance Log Viewer
-- ✅ **Auto-detect device IP cho Simulator** - ưu tiên VPN subnet kết nối được
-- ✅ **Socket-level preflight ping** + 3 retries (fix 172.16.8.139 / May 20 race condition WinError 1005)
-- ✅ **Fix "Mất kết nối undefined"** trong X628 PRO Simulator (data.ip có giá trị)
-- ✅ **Fix e.message undefined** trong fetch errors + status_name crash
-
-### 1. AttendanceSuite-v2.0.2.exe (Portable EXE - 15MB)
-- ✅ Double-click → cửa sổ desktop mở ngay (pywebview + Edge WebView2)
-- ✅ 2 servers chạy ngầm trong 1 process (không spawn subprocess):
-  - **Viewer** :8080 - Log chấm công + báo cáo
-  - **Simulator** :8081 - Mô phỏng máy X628 PRO
-- ✅ 4 tabs UI: Đọc log / X628 Simulator / ATTLOG Tools / Live Status
-- ✅ Filter nhanh: Hôm nay / Hôm qua / Tuần này / Tháng này / Tất cả
-- ✅ ATTLOG Tools: Inject / Delete / Edit Time / Real Punch qua CVE-2023-3941
-- ✅ Live Status search filter (Online/Offline/CC/KY/SIM) + search box
-- ✅ Tự động kill port cũ khi khởi động (tránh lỗi trùng port)
-- ✅ Single-instance lock (không cho mở 2 cửa sổ)
-- ✅ Force kill port khi đóng (clean shutdown)
-
-### 2. attendance-mobile-arm64-2.0.2+15.apk (APK arm64 - 17MB)
-- ✅ Flutter mobile app cho Android arm64-v8a
-- ✅ 4 tabs: Log chấm công / X628 PRO / Chấm từ xa / **ATTLOG Tools**
-- ✅ ATTLOG Tools gọi EXE qua HTTP để inject/delete/edit
-- ✅ Cài đè được lên mọi version trước (cùng signing cert SHA-1 `5d54b3cf...f6c5`)
-
-## Cài đặt
-
-### Windows EXE
-1. Copy `AttendanceSuite-v2.0.2.exe` ra Desktop
-2. Double-click → cửa sổ desktop mở ra
-3. Không cần cài đặt, không cần Python, không cần mạng (trừ khi giao tiếp thiết bị)
-
-### Android APK
-1. Copy `attendance-mobile-arm64-2.0.2+15.apk` sang điện thoại
-2. Mở bằng File Manager → "Cài đặt"
-3. Cho phép "Cài đặt từ nguồn không xác định" nếu được hỏi
-4. App tự nhận diện thiết bị qua VPN/Wi-Fi
-
-## Sử dụng
-
-### Tab 1: Đọc log chấm công
-- Tick chọn máy cần đọc (CC/KY/SV/GW đều chọn được)
-- Chọn ngày hoặc bấm "Hôm nay / Hôm qua / Tuần / Tháng / Tất cả"
-- Bấm **"Lấy log"** → tự động fetch từ web backup (nhanh) hoặc từ thiết bị (chậm)
-- "Export CSV" / "Excel" / "Báo cáo" ở góc trên
-
-### Tab 2: X628 PRO Simulator
-- Chọn máy online (chấm xanh) hoặc nhập IP thủ công
-- Nhập Mã NV + Pass (nếu cần)
-- Chọn thao tác (Check-In/Out, Break, OT) + phương thức (Vân tay/Thẻ/Mã số)
-- Bấm **"Chấm công"** → ghi local + cố gắng ghi lên máy thật
-- ⚠️ Máy X628 PRO firmware 6.60 ACK_OK nhưng KHÔNG ghi ATTLOG từ xa (đây là giới hạn firmware)
-
-### Tab 3: ATTLOG Tools (CVE-2023-3941)
-- **Real Punch**: chấm công thật qua web backup (ghi vào ZKDB.db)
-- **Inject**: chèn bản ghi mới vào ATTLOG (cần reboot ~30s)
-- **Delete**: xóa bản ghi theo marker (đánh dấu khi inject để cleanup)
-- **Edit Time**: chỉnh sửa thời gian bản ghi đã inject
-- Tất cả thao tác đều dùng CVE-2023-3941 (UPLOAD_PICTURE path traversal + UPLOAD_USERPHOTO)
-- Backup tự động qua CVE-2023-4587 (unauth web backup download)
-
-### Tab 4: Live Device Status
-- Auto-probe mỗi 8 giây
-- **Search filter** (input box): tìm theo IP / tên / lỗi
-- **Filter chip**: Tất cả / Online / Offline / CC / KY / SIM
-- Hiển thị latency (ms), log count, lỗi (nếu có)
-
-## Lưu ý kỹ thuật
+### Cải tiến chính
+- ✅ **APK tự host server** trong app (shelf HTTP server chạy trên port 8080, không cần Windows EXE)
+- ✅ **VPN Bệnh viện tích hợp sẵn** (openvpn_flutter) - kết nối 172.16.x.x không cần OpenVPN Connect
+- ✅ **ZK protocol client trong Dart** - kết nối trực tiếp port 4370 từ phone
+- ✅ **Giao diện mới** với top bar icons + bottom nav 6 tabs + chấm xanh online status
+- ✅ **Auto-detect server URL** - ưu tiên 127.0.0.1 (embedded), fallback network IP
+- ✅ **Live Status + search filter** - tìm theo IP/tên/lỗi + filter chip Online/Offline/CC/KY/SIM
 
 ### Yêu cầu
-- **Windows 10+** cho EXE (cần WebView2 - đã có sẵn trên Windows 11)
-- **Android 7.0+** (API 24+) cho APK
-- **Mạng VPN nội bộ BVĐK Ninh Thuận** để truy cập 24 máy chấm công
-- **PIN 1 (admin)** đã được đăng ký trên máy thật
+- **Android 7.0+** (API 24+)
+- **arm64-v8a** (Samsung A17 hoặc tương đương)
+- ~45 MB cho APK có sẵn OpenVPN library
 
-### Thiết bị đã test (verified E2E)
-- **May 3** (172.16.0.214) - X628 PRO FW 6.60 Dec 9 2019 - CVE-2023-3941 EXPLOITED
-- **May 20** (172.16.8.139) - WinError 1005 race fix - socket-level retry
-- **Web UI** (172.16.254.202) - CVE-2023-4587 backup vulnerable
-- 21/24 thiết bị khác cần VPN để truy cập
+### Cài đặt
+1. Copy `attendance-mobile-arm64-2.1.0+16.apk` sang điện thoại
+2. Mở bằng File Manager → "Cài đặt"
+3. Cho phép "Cài đặt từ nguồn không xác định"
+4. Cài đè được lên v2.0.x (cùng signing cert SHA-1 `5d54b3cf...`)
 
-### Bảo mật
-⚠️ **Tool này khai thác CVE-2023-3941 + CVE-2023-4587 trên ZK X628 PRO FW 6.60.**
-Chỉ sử dụng trên thiết bị thuộc sở hữu của BVĐK Ninh Thuận.
+### Sử dụng APK standalone (không cần Windows)
+
+#### Tab 1: Log (Đọc log chấm công)
+- Server URL hiển thị ở top bar (mặc định `http://127.0.0.1:8080`)
+- **Bấm icon 🩺** trên top bar để xem trạng thái kết nối (server/VPN/devices)
+- Chọn ngày / chips: Hôm nay / Hôm qua / 7 ngày / 30 ngày
+- Tick thiết bị bên trái → **LẤY LOG** → app tự fetch qua embedded server
+
+#### Tab 6: Cài đặt (VPN + Server)
+- **🔌 Server embedded**: hiển thị trạng thái + restart
+- **🌐 VPN Bệnh viện**:
+  - Username mặc định: `nemk`
+  - **Paste file .ovpn** từ BV vào mục "Cấu hình nâng cao"
+  - **KẾT NỐI** → app tự động bật VPN, sau đó có thể truy cập 172.16.x.x
+  - **NGẮT** → tắt VPN
+- **Thông tin**: phiên bản, tác giả, GitHub
+
+### Cấu hình file .ovpn
+
+App cần file `.ovpn` của BV Ninh Thuận. Cách lấy:
+
+1. Từ máy tính có OpenVPN Connect: vào Settings → Profile → Export .ovpn
+2. Copy nội dung file .ovpn (bao gồm certificates)
+3. Trong app: Tab Cài đặt → VPN → Mở "⚙️ Cấu hình nâng cao" → Paste nội dung .ovpn
+4. Lưu → KẾT NỐI
+
+Nếu chưa có file .ovpn, có thể dùng cách khác: nhờ IT BV cấp file VPN qua email.
+
+### Các tính năng khác (vẫn còn)
+- ✅ X628 PRO Simulator (Tab 2)
+- ✅ Chấm từ xa (Tab 3) - qua web backup
+- ✅ PIN+Password workflow (Tab 4) - BYPASS FW 6.60
+- ✅ Bảo mật / ATTLOG Tools (Tab 5)
+
+### Vẫn dùng Windows EXE nếu muốn (v2.0.2)
+- EXE chạy trên máy tính, phone kết nối vào `http://<PC_IP>:8080`
+- Dùng khi cần giao diện lớn hơn hoặc test nhanh
 
 ## Lịch sử
 
-- **v2.0.2** (16/09/2026) - Live Status search, KY/SV/GW selectable, fix Simulator undefined, socket retry
-- **v2.0.1** (16/09/2026) - Quick filter buttons, online status indicator, single-instance lock
-- **v2.0.0** (16/09/2026) - Production release: Portable EXE + APK + ATTLOG Tools
-- **v1.3.2+6** trở về trước: Early development versions
+- **v2.1.0+16** (16/09/2026) - Self-hosted APK + VPN
+- **v2.0.2+15** (16/09/2026) - EXE + APK + Windows backend
+- **v2.0.1+14** (16/09/2026) - Initial production release
+- **v1.9.0+12** trở về trước: Early development
 
 ## Liên hệ
 
