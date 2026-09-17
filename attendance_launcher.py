@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AttendanceSuite v2.0.8 - Single-File Desktop Launcher
+AttendanceSuite v2.0.10 - Single-File Desktop Launcher
 =====================================================
 In-process threading launcher. No subprocess.Popen - eliminates port conflicts.
 Single-click EXE -> native pywebview window opens.
@@ -12,7 +12,7 @@ import sys, os, threading, time, socket, atexit, signal, traceback, importlib.ut
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 
-VERSION = '2.0.8'
+VERSION = '2.0.10'
 APP_NAME = 'AttendanceSuite'
 COPYRIGHT = '(c) 2026 Dr. Nem - BVDK Ninh Thuan'
 

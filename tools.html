@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<title>ATTLOG Tools - AttendanceSuite v2.0.8</title>
+<title>ATTLOG Tools - AttendanceSuite v2.0.10</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -163,7 +163,11 @@ footer {
       </div>
       <div class="field">
         <label>IP Web (để lấy ZKDB.db): <span style="color:#666">(để trống = 172.16.254.202 Web UI)</span></label>
-        <input type="text" id="webIp" placeholder="172.16.254.202" value="172.16.254.202">
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="webIp" placeholder="172.16.254.202" value="172.16.254.202" style="flex:1;">
+          <button type="button" class="secondary" onclick="resetWebIp()" style="margin:0;padding:5px 10px;font-size:11px;white-space:nowrap;" title="Reset về Web UI May 14 2018 fw (qua VPN)">🔧 172.16.254.202</button>
+        </div>
+        <div id="webIpWarn" style="font-size:11px;margin-top:4px;"></div>
       </div>
       <button class="secondary" onclick="checkDevice()">🔌 Kiểm tra chi tiết (FW/Serial/Log count)</button>
       <div id="devInfo" style="margin-top: 8px; font-size: 12px;"></div>
@@ -235,6 +239,17 @@ footer {
           </select>
         </div>
       </div>
+      <div class="row2">
+        <div class="field">
+          <label>Mật khẩu (để xác minh PIN có trên máy, optional):</label>
+          <input type="text" id="punchPwd" placeholder="VD: 891401 (để trống = chỉ check PIN)">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="secondary" onclick="verifyPunchPin()" id="btnPunchVerify">🔍 Xác minh PIN + Password</button>
+        </div>
+      </div>
+      <div id="punchVerifyResult" style="margin-top:6px;font-size:12px;"></div>
       <button onclick="realPunch()" id="btnPunch">✍️ Chấm công (ghi lên máy thật)</button>
       <div class="log" id="punchLog"></div>
     </div>
@@ -269,6 +284,17 @@ footer {
           <input type="text" id="injMarker" value="TEST_INJECT" placeholder="TEST_INJECT">
         </div>
       </div>
+      <div class="row2">
+        <div class="field">
+          <label>Mật khẩu (để xác minh, optional):</label>
+          <input type="text" id="injPwd" placeholder="VD: 891401 (để trống = chỉ check PIN)">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="secondary" onclick="verifyInjPin()" id="btnInjVerify">🔍 Xác minh PIN + Password</button>
+        </div>
+      </div>
+      <div id="injVerifyResult" style="margin-top:6px;font-size:12px;"></div>
       <button class="warn-btn" onclick="injectRecord()" id="btnInj">🧪 Inject (upload + reboot)</button>
       <div class="log" id="injLog"></div>
     </div>
@@ -371,9 +397,22 @@ function getSelected() {
   const ip = (document.getElementById('ipManual').value || selectedIp || '').trim();
   // Web IP defaults to 172.16.254.202 (May 14 2018 fw Web UI). NEVER fallback to ip -
   // ip is a ZK terminal on port 4370 (no HTTP server) so it would always fail.
-  const wip = (document.getElementById('webIp').value || '172.16.254.202').trim();
+  let wip = (document.getElementById('webIp').value || '172.16.254.202').trim();
+  // Auto-fix common bug: if user typed IP máy vào ô IP Web -> redirect
+  if (wip === ip) {
+    wip = '172.16.254.202';
+    document.getElementById('webIp').value = wip;
+    const warn = document.getElementById('webIpWarn');
+    if (warn) warn.innerHTML = '<span style="color:#ffaa66;">⚠ IP Web trùng IP máy. Đã tự động chuyển sang 172.16.254.202.</span>';
+  }
   if (!ip) { alert('Chọn thiết bị trước'); return null; }
   return { ip, web_ip: wip };
+}
+
+function resetWebIp() {
+  document.getElementById('webIp').value = '172.16.254.202';
+  const warn = document.getElementById('webIpWarn');
+  if (warn) warn.innerHTML = '<span style="color:#5fff7f;">✓ Đã đặt IP Web = 172.16.254.202 (Web UI May 14 2018 fw)</span>';
 }
 
 async function checkDevice() {
@@ -526,6 +565,72 @@ async function pollJob(jobId, logEl, btnId) {
   }
   logEl.innerHTML = '<div style="color:#ff8888;">Timeout chờ job</div>';
   document.getElementById(btnId).disabled = false;
+}
+
+function renderVerifyResult(box, d, pin, pwd) {
+  if (!d.ok) {
+    return '<span class="status offline"><span class="dot"></span>Fail</span> '
+      + '<span style="color:#ff8888;">' + (d.error||'?') + '</span>';
+  }
+  if (!d.matched) {
+    return '<span class="status warn"><span class="dot"></span>Not found</span> '
+      + '<span style="color:#ffaa66;">PIN ' + pin + ' khong co tren may (co ' + (d.user_count||'?') + ' users)</span>';
+  }
+  const u = d.user;
+  let pwdInfo = '';
+  if (pwd) {
+    if (d.password_match === true) {
+      pwdInfo = '<div style="color:#5fff7f;margin-top:4px;">Password KHOP (' + (u.password||'') + ')</div>';
+    } else if (d.password_match === false) {
+      pwdInfo = '<div style="color:#ff8888;margin-top:4px;">Password KHONG khop (stored="' + (u.password||'(rong)') + '")</div>';
+    } else if (d.password_stored === false) {
+      pwdInfo = '<div style="color:#aaa;margin-top:4px;">May khong luu password</div>';
+    }
+  }
+  return '<span class="status online"><span class="dot"></span>Matched</span>'
+    + '<div style="margin-top:6px;font-size:11px;color:#aaa;">'
+    + 'UID: <b style="color:#00d4ff;">' + u.uid + '</b> | user_id: <b style="color:#00d4ff;">' + (u.user_id||'?') + '</b><br>'
+    + 'Ho ten: <b style="color:#00d4ff;">' + (u.name||'?') + '</b> | Privilege: ' + u.privilege + ' (0=user, 14=admin)<br>'
+    + 'Group: ' + (u.group_id||'?') + ' | Card: ' + (u.card||0)
+    + '</div>' + pwdInfo;
+}
+
+async function verifyPunchPin() {
+  const sel = getSelected(); if (!sel) return;
+  const pin = (document.getElementById('punchPin').value || '').trim();
+  const pwd = (document.getElementById('punchPwd').value || '').trim();
+  if (!pin) { alert('Nhập PIN'); return; }
+  const el = document.getElementById('punchVerifyResult');
+  el.innerHTML = '<span class="status warn"><span class="dot"></span>Dang xac minh ' + sel.ip + '...</span>';
+  try {
+    const r = await fetch('/api/attlog/check-user', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ip: sel.ip, pin: pin, password: pwd})
+    });
+    const d = await r.json();
+    el.innerHTML = renderVerifyResult(el, d, pin, pwd);
+  } catch (e) {
+    el.innerHTML = '<span class="status offline"><span class="dot"></span>Error</span> ' + e;
+  }
+}
+
+async function verifyInjPin() {
+  const sel = getSelected(); if (!sel) return;
+  const pin = (document.getElementById('injPin').value || '').trim();
+  const pwd = (document.getElementById('injPwd').value || '').trim();
+  if (!pin) { alert('Nhập PIN'); return; }
+  const el = document.getElementById('injVerifyResult');
+  el.innerHTML = '<span class="status warn"><span class="dot"></span>Dang xac minh ' + sel.ip + '...</span>';
+  try {
+    const r = await fetch('/api/attlog/check-user', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ip: sel.ip, pin: pin, password: pwd})
+    });
+    const d = await r.json();
+    el.innerHTML = renderVerifyResult(el, d, pin, pwd);
+  } catch (e) {
+    el.innerHTML = '<span class="status offline"><span class="dot"></span>Error</span> ' + e;
+  }
 }
 
 async function realPunch() {
