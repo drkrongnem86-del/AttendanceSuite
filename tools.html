@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>ATTLOG Tools - AttendanceSuite v2.0.8</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  min-height: 100vh;
+  color: #e0e0e0;
+  padding: 14px;
+}
+header {
+  background: #0f1729;
+  border: 1px solid #2a3a5a;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+header h1 { color: #00d4ff; font-size: 18px; margin-bottom: 6px; }
+header .desc { color: #888; font-size: 12px; }
+.warn { background: #3a2a1a; border: 1px solid #aa6622; color: #ffaa66; padding: 8px 10px; border-radius: 6px; margin-top: 8px; font-size: 12px; line-height: 1.5; }
+.hint { background: #0f2030; border-left: 3px solid #00d4ff; padding: 6px 10px; margin: 6px 0 10px 0; border-radius: 4px; font-size: 12px; color: #aaccee; }
+.row { display: flex; gap: 14px; flex-wrap: wrap; }
+.col { flex: 1; min-width: 380px; }
+.card {
+  background: #0f1729;
+  border: 1px solid #2a3a5a;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.card h2 {
+  color: #00d4ff;
+  font-size: 14px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2a3a5a;
+}
+label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #aaa;
+}
+input, select, textarea, button {
+  width: 100%;
+  padding: 7px 10px;
+  background: #1a2a3a;
+  border: 1px solid #2a3a5a;
+  color: #e0e0e0;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+}
+button {
+  background: #00d4ff;
+  color: #000;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 9px 14px;
+  margin-top: 8px;
+  transition: opacity 0.15s;
+}
+button:hover:not(:disabled) { opacity: 0.85; }
+button:disabled { background: #555; color: #888; cursor: not-allowed; }
+button.danger { background: #ff4455; color: #fff; }
+button.warn-btn { background: #ff8800; color: #000; }
+button.secondary { background: #2a3a5a; color: #00d4ff; }
+.field { margin-bottom: 8px; }
+.row2 { display: flex; gap: 10px; }
+.row2 > * { flex: 1; }
+.log {
+  background: #0a0f1a;
+  border: 1px solid #2a3a5a;
+  border-radius: 6px;
+  padding: 10px;
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+  color: #5fff7f;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  margin-top: 10px;
+}
+.status { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+.status .dot { width: 8px; height: 8px; border-radius: 50%; }
+.status.online { background: #1a4a1a; color: #5fff7f; }
+.status.online .dot { background: #5fff7f; box-shadow: 0 0 6px #5fff7f; }
+.status.offline { background: #4a1a1a; color: #ff8888; }
+.status.offline .dot { background: #ff8888; }
+.status.warn { background: #3a2a1a; color: #ffaa66; }
+.status.warn .dot { background: #ffaa66; }
+
+/* Device list with online dot */
+.device-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  background: #0a0f1a;
+  border-radius: 4px;
+}
+.dev-item {
+  padding: 6px 8px;
+  border: 1px solid #2a3a5a;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  background: #1a2a3a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dev-item:hover { border-color: #00d4ff; }
+.dev-item.selected { border-color: #00d4ff; background: #2a3a5a; }
+.dev-item .dot { width: 8px; height: 8px; border-radius: 50%; background: #888; flex-shrink: 0; }
+.dev-item.online .dot { background: #5fff7f; box-shadow: 0 0 6px #5fff7f; }
+.dev-item.offline .dot { background: #ff5555; }
+.dev-item .info { flex: 1; min-width: 0; }
+.dev-item .ip { color: #00d4ff; font-weight: bold; font-size: 12px; }
+.dev-item .note { color: #888; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dev-item .lat { color: #888; font-size: 10px; }
+.dev-item.online .lat { color: #5fff7f; }
+.tag { display: inline-block; padding: 1px 6px; background: #2a3a5a; color: #00d4ff; border-radius: 3px; font-size: 10px; margin-left: 4px; }
+footer {
+  position: fixed;
+  bottom: 4px;
+  right: 12px;
+  font-size: 10px;
+  color: #555;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛠 ATTLOG Tools - AttendanceSuite v2.0.8 <span class="tag">CVE-2023-3941</span></h1>
+  <div class="desc">Tra log, đọc chấm công, chấm công thật ghi lên ATTLOG, xóa log, chỉnh thời gian</div>
+  <div class="warn">⚠️ Tool này khai thác CVE-2023-3941 (UPLOAD_PICTURE path traversal) trên ZK X628 PRO FW 6.60. Chỉ dùng trên thiết bị của bạn. Reboot thiết bị ~30s sau mỗi thao tác.</div>
+  <div style="margin-top:6px; font-size:11px; color:#888;">© 2026 Dr. Nểm - BVĐK Ninh Thuận</div>
+</header>
+
+<div class="row">
+  <div class="col" style="flex: 0 0 380px;">
+    <div class="card">
+      <h2>📡 1. Chọn thiết bị <span class="tag">(chấm xanh = online)</span>
+        <button class="secondary" style="float:right;margin:0;padding:4px 10px;font-size:11px;" onclick="pingAllDevices()">🔄 Refresh</button>
+      </h2>
+      <div class="hint">📋 <b>Hướng dẫn:</b> Bấm 🔄 Refresh để quét 24 máy. <b style="color:#5fff7f;">Chấm xanh sáng</b> = máy đang online (chấm được). <b style="color:#ff5555;">Chấm đỏ</b> = offline / tắt nguồn. Click vào máy muốn chấm.</div>
+      <div id="devList" class="device-grid" style="max-height:320px;overflow-y:auto;padding:4px;">
+        <div class="dev-item" style="grid-column: 1 / -1; text-align: center; color: #888;">Chưa quét. Bấm 🔄 Refresh.</div>
+      </div>
+      <div class="hint">💡 <b>Chọn máy muốn chấm/xóa/sửa</b> - cột "LAT" = latency (ms). &lt;50ms = tốt, &gt;200ms = mạng chậm.</div>
+      <div class="field">
+        <label>Hoặc nhập IP thủ công (vd: 172.16.0.214):</label>
+        <input type="text" id="ipManual" placeholder="172.16.0.214" value="172.16.0.214">
+      </div>
+      <div class="field">
+        <label>IP Web (để lấy ZKDB.db): <span style="color:#666">(để trống = 172.16.254.202 Web UI)</span></label>
+        <input type="text" id="webIp" placeholder="172.16.254.202" value="172.16.254.202">
+      </div>
+      <button class="secondary" onclick="checkDevice()">🔌 Kiểm tra chi tiết (FW/Serial/Log count)</button>
+      <div id="devInfo" style="margin-top: 8px; font-size: 12px;"></div>
+
+      <div style="margin-top:14px;padding-top:10px;border-top:1px dashed #2a3a5a;">
+        <div class="hint" style="background:#3a2a1a;border-color:#aa6622;color:#ffaa66;">
+          🔍 <b>Test PIN + Password (qua port 4370):</b> kiểm tra user có tồn tại trên máy + so sánh password nếu có.
+        </div>
+        <div class="row2" style="margin-top:6px;">
+          <input type="text" id="checkPin" placeholder="Mã NV (PIN)" value="1">
+          <input type="text" id="checkPwd" placeholder="Mật khẩu (vd: 891401)" value="891401">
+        </div>
+        <button onclick="checkUser()" style="background:#aa6622;color:#fff;">🔍 Test PIN + Password</button>
+        <div id="checkUserResult" style="margin-top: 8px; font-size: 12px; white-space:pre-wrap;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col" style="flex: 2 1 600px;">
+    <div class="card">
+      <h2>📥 2. Tra log / Đọc chấm công</h2>
+      <div class="hint">📋 <b>Hướng dẫn:</b> Chọn số records muốn xem. Tool sẽ đọc từ <b>web backup</b> (nhanh ~5s) hoặc <b>thiết bị</b> (chậm ~25s cho 49k records).</div>
+      <div class="row2">
+        <button class="secondary" onclick="loadRecent(20)">📊 20 gần nhất</button>
+        <button class="secondary" onclick="loadRecent(100)">📊 100 gần nhất</button>
+        <button class="secondary" onclick="loadRecent(500)">📊 500 gần nhất</button>
+      </div>
+      <div id="recentTable" style="margin-top: 10px; max-height: 350px; overflow-y: auto;"></div>
+    </div>
+
+    <div class="card">
+      <h2>✍️ 3. Chấm công thật (ghi ATTLOG lên máy)</h2>
+      <div class="hint">
+        📋 <b>Workflow (4 bước, ~30-60s):</b><br>
+        <b>①</b> Tải ZKDB.db từ web backup (auto-fallback: 172.16.254.202 → 172.16.200.105)<br>
+        <b>②</b> Thêm 1 record ATTLOG mới (PIN + thời gian + marker)<br>
+        <b>③</b> Upload ZKDB.db lên máy qua CVE-2023-3941 (~3-4 phút, 32KB chunks)<br>
+        <b>④</b> Reboot máy (~30s downtime)<br>
+        <br>
+        🎯 <b>Marker (để quản lý records BS đã inject):</b><br>
+        • <code style="background:#1a2a3a;padding:1px 4px;">APK_REAL_PUNCH</code> → ghi qua mobile app (workflow thật)<br>
+        • <code style="background:#1a2a3a;padding:1px 4px;">TEST_INJECT</code> → test/dev thử nghiệm<br>
+        • <code style="background:#1a2a3a;padding:1px 4px;">BS_CONFIRMED</code> → BS verify thủ công, ATTLOG không thật trên máy nhưng tính như đã chấm<br>
+        <br>
+        ⚠️ <b>Yêu cầu mạng:</b> VPN Bệnh viện bật, có thể truy cập 172.16.x.x. Nếu fail → gợi ý bật VPN.
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Mã NV (PIN):</label>
+          <input type="text" id="punchPin" value="1" placeholder="VD: 1, 47, 1383">
+        </div>
+        <div class="field">
+          <label>Loại chấm:</label>
+          <select id="punchStatus">
+            <option value="0">Check-In (Vào)</option>
+            <option value="1">Check-Out (Ra)</option>
+            <option value="2">Break-Out (Ra ngoài)</option>
+            <option value="3">Break-In (Vào lại)</option>
+            <option value="4">OT-In (Vào OT)</option>
+            <option value="5">OT-Out (Ra OT)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Phương thức:</label>
+          <select id="punchMethod">
+            <option value="1">Vân tay (FP)</option>
+            <option value="0">Mật khẩu (Pwd)</option>
+            <option value="15">Thẻ (Card)</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="realPunch()" id="btnPunch">✍️ Chấm công (ghi lên máy thật)</button>
+      <div class="log" id="punchLog"></div>
+    </div>
+
+    <div class="card">
+      <h2>🧪 4. Inject tùy chỉnh (cho test / chấm hộ)</h2>
+      <div class="hint">📋 <b>Hướng dẫn:</b> Điền PIN / thời gian / marker → bấm <b>Inject</b>. <b>⚠ Cẩn thận:</b> upload lại toàn bộ ZKDB.db có thể mất record được chấm trong khoảng thời gian giữa web backup và upload (~1-2 phút).</div>
+      <div class="row2">
+        <div class="field">
+          <label>PIN:</label>
+          <input type="text" id="injPin" value="1">
+        </div>
+        <div class="field">
+          <label>Thời gian (ISO):</label>
+          <input type="text" id="injTs" placeholder="2026-09-16T10:23:35">
+        </div>
+        <div class="field">
+          <label>Số lượng:</label>
+          <input type="number" id="injCount" value="1" min="1" max="100">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Status:</label>
+          <select id="injStatus">
+            <option value="0">Check-In</option>
+            <option value="1">Check-Out</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Marker (để xóa sau):</label>
+          <input type="text" id="injMarker" value="TEST_INJECT" placeholder="TEST_INJECT">
+        </div>
+      </div>
+      <button class="warn-btn" onclick="injectRecord()" id="btnInj">🧪 Inject (upload + reboot)</button>
+      <div class="log" id="injLog"></div>
+    </div>
+
+    <div class="card">
+      <h2>🗑 5. Xóa log theo marker</h2>
+      <div class="hint">📋 <b>Hướng dẫn:</b> Điền marker (vd: <code style="background:#1a2a3a;padding:2px 6px;border-radius:3px;">APK_REAL_PUNCH</code>) → bấm <b style="color:#ff4455;">Xóa</b>. Chỉ xóa các record có <code>CREATE_ID=marker</code>. Không ảnh hưởng record khác.</div>
+      <div class="field">
+        <label>Marker cần xóa:</label>
+        <input type="text" id="delMarker" value="APK_REAL_PUNCH" placeholder="APK_REAL_PUNCH, TEST_INJECT, ...">
+      </div>
+      <button class="danger" onclick="deleteByMarker()" id="btnDel">🗑 Xóa (upload + reboot)</button>
+      <div class="log" id="delLog"></div>
+    </div>
+
+    <div class="card">
+      <h2>✏️ 6. Chỉnh thời gian (sửa ATTLOG time)</h2>
+      <div class="hint">📋 <b>Hướng dẫn:</b> Dùng khi NV chấm sai giờ. Nhập marker + thời gian mới ISO → bấm <b>Sửa</b>. Lưu ý: backup ZKDB.db trước khi sửa.</div>
+      <div class="row2">
+        <div class="field">
+          <label>Marker:</label>
+          <input type="text" id="editMarker" placeholder="APK_REAL_PUNCH">
+        </div>
+        <div class="field">
+          <label>Thời gian mới (ISO):</label>
+          <input type="text" id="editTime" placeholder="2026-09-16T08:00:00">
+        </div>
+      </div>
+      <button class="warn-btn" onclick="editTime()" id="btnEdit">✏️ Cập nhật (upload + reboot)</button>
+      <div class="log" id="editLog"></div>
+    </div>
+  </div>
+</div>
+
+<footer>© 2026 Dr. Nểm - BVĐK Ninh Thuận | ATTLOG Tools v2.0.1</footer>
+
+<script>
+let selectedIp = null;
+let selectedWebIp = null;
+let onlineMap = {};  // ip -> {online, latency_ms}
+const STATUS_NAME = {0:'In', 1:'Out', 2:'Break-Out', 3:'Break-In', 4:'OT-In', 5:'OT-Out'};
+const PUNCH_NAME = {0:'Pwd', 1:'FP', 15:'Card'};
+
+function nowIso() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+    + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+}
+document.getElementById('injTs').value = nowIso();
+
+async function pingAllDevices() {
+  const el = document.getElementById('devList');
+  el.innerHTML = '<div class="dev-item" style="grid-column: 1/-1;text-align:center;color:#aaa;"><span class="dot"></span> Đang quét 24 máy...</div>';
+  try {
+    const r = await fetch('/api/attlog/ping-all', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const d = await r.json();
+    if (!d.ok) {
+      el.innerHTML = '<div class="dev-item" style="grid-column: 1/-1;color:#ff8888">Lỗi: ' + (d.error||'?') + '</div>';
+      return;
+    }
+    onlineMap = {};
+    d.devices.forEach(x => onlineMap[x.ip] = x);
+    const online = d.online_count, total = d.count;
+    let html = '';
+    d.devices.forEach((dev, i) => {
+      const cls = dev.online ? 'online' : 'offline';
+      const lat = dev.online ? (dev.latency_ms + 'ms') : 'OFF';
+      const noLog = (dev.type === 'gateway' || dev.type === 'server');
+      const typeColor = dev.type === 'attendance' ? '#107c10' : (dev.type === 'signing' ? '#9b00d4' : (dev.type === 'gateway' ? '#888' : (dev.type === 'server' ? '#888' : '#8b4513')));
+      const typeShort = ({attendance:'CC',signing:'KY',gateway:'GW',server:'SV',virtual:'SIM'})[dev.type] || '?';
+      html += '<div class="dev-item ' + cls + '" data-ip="' + dev.ip + '" data-type="' + (dev.type||'') + '" onclick="selectDevice(\'' + dev.ip + '\')">';
+      html += '<div class="dot"></div><div class="info">';
+      html += '<div class="ip"><span style="background:' + typeColor + ';color:#fff;font-size:9px;padding:1px 4px;border-radius:2px;margin-right:4px;">' + typeShort + '</span>' + dev.ip + '</div>';
+      html += '<div class="note">' + (dev.note||'-') + (noLog ? ' <span style="color:#888;">(không phải máy chấm công)</span>' : '') + '</div>';
+      html += '</div><div class="lat">' + lat + '</div>';
+      html += '</div>';
+    });
+    el.innerHTML = '<div style="grid-column:1/-1;color:#888;font-size:11px;text-align:center;margin-bottom:6px;">' +
+      '<b style="color:#5fff7f">' + online + '</b>/' + total + ' online | <b style="color:#ff5555">' + (total - online) + '</b> offline</div>' + html;
+    if (!selectedIp) {
+      const firstOnline = d.devices.find(x => x.online);
+      if (firstOnline) selectDevice(firstOnline.ip);
+    }
+  } catch(e) {
+    el.innerHTML = '<div class="dev-item" style="grid-column: 1/-1;color:#ff8888">Lỗi: ' + e.message + '</div>';
+  }
+}
+
+function selectDevice(ip) {
+  document.querySelectorAll('.dev-item').forEach(d => d.classList.remove('selected'));
+  const el = document.querySelector('.dev-item[data-ip="'+ip+'"]');
+  if (el) el.classList.add('selected');
+  selectedIp = ip;
+  document.getElementById('ipManual').value = ip;
+  const w = onlineMap[ip] ? ip : ip;
+  document.getElementById('webIp').value = w;
+}
+
+function getSelected() {
+  const ip = (document.getElementById('ipManual').value || selectedIp || '').trim();
+  // Web IP defaults to 172.16.254.202 (May 14 2018 fw Web UI). NEVER fallback to ip -
+  // ip is a ZK terminal on port 4370 (no HTTP server) so it would always fail.
+  const wip = (document.getElementById('webIp').value || '172.16.254.202').trim();
+  if (!ip) { alert('Chọn thiết bị trước'); return null; }
+  return { ip, web_ip: wip };
+}
+
+async function checkDevice() {
+  const sel = getSelected(); if (!sel) return;
+  const el = document.getElementById('devInfo');
+  el.innerHTML = '<span class="status warn"><span class="dot"></span>Đang kết nối...</span>';
+  try {
+    const r = await fetch('/api/attlog/device-info', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ip: sel.ip})
+    });
+    const d = await r.json();
+    if (d.connected) {
+      el.innerHTML = '<span class="status online"><span class="dot"></span>Online</span>'
+        + '<div style="margin-top:6px;font-size:11px;color:#aaa;">'
+        + 'FW: ' + (d.firmware||'?') + '<br>Platform: ' + (d.platform||'?') + '<br>'
+        + 'Serial: ' + (d.serial||'?') + '<br>Users: ' + d.users + ' | ATTLOG: ' + d.log_count + '<br>'
+        + 'Web UI: ' + (d.has_web ? '✅' : '❌') + '</div>';
+    } else {
+      el.innerHTML = '<span class="status offline"><span class="dot"></span>Offline</span>'
+        + '<div style="margin-top:6px;color:#ff8888;font-size:11px;">' + (d.error||'Không kết nối được') + '</div>';
+    }
+  } catch(e) {
+    el.innerHTML = '<span class="status offline"><span class="dot"></span>Lỗi: ' + e.message + '</span>';
+  }
+}
+
+async function checkUser() {
+  const sel = getSelected(); if (!sel) return;
+  const pin = (document.getElementById('checkPin').value || '').trim();
+  const pwd = (document.getElementById('checkPwd').value || '').trim();
+  if (!pin) { alert('Nhập PIN'); return; }
+  const el = document.getElementById('checkUserResult');
+  el.innerHTML = '<span class="status warn"><span class="dot"></span>Đang check...</span>';
+  try {
+    const r = await fetch('/api/attlog/check-user', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ip: sel.ip, pin: pin, password: pwd})
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      el.innerHTML = '<span class="status offline"><span class="dot"></span>Fail</span> '
+        + '<span style="color:#ff8888;">' + (d.error||'?') + '</span>';
+      return;
+    }
+    if (!d.matched) {
+      el.innerHTML = '<span class="status warn"><span class="dot"></span>Not found</span> '
+        + '<span style="color:#ffaa66;">' + (d.error||'') + '</span>';
+      return;
+    }
+    const u = d.user;
+    let pwdInfo = '';
+    if (d.password_match === true) {
+      pwdInfo = '<div style="color:#5fff7f;margin-top:4px;">Password khop ("' + (u.password||'') + '")</div>';
+    } else if (d.password_match === false) {
+      pwdInfo = '<div style="color:#ff8888;margin-top:4px;">Password KHONG khop (stored="' + (u.password||'(rong)') + '")</div>';
+    } else if (d.password_stored === false) {
+      pwdInfo = '<div style="color:#aaa;margin-top:4px;">May khong luu password</div>';
+    }
+    el.innerHTML = '<span class="status online"><span class="dot"></span>Matched</span>'
+      + '<div style="margin-top:6px;font-size:11px;color:#aaa;">'
+      + 'UID: <b style="color:#00d4ff;">' + u.uid + '</b><br>'
+      + 'user_id: <b style="color:#00d4ff;">' + (u.user_id||'?') + '</b><br>'
+      + 'Ho ten: <b style="color:#00d4ff;">' + (u.name||'?') + '</b><br>'
+      + 'Privilege: ' + u.privilege + ' (0=user, 14=admin)<br>'
+      + 'Group: ' + (u.group_id||'?') + '<br>'
+      + 'Card: ' + (u.card||0)
+      + '</div>' + pwdInfo;
+  } catch (e) {
+    el.innerHTML = '<span class="status offline"><span class="dot"></span>Error</span> ' + e;
+  }
+}
+
+async function loadRecent(limit) {
+  const sel = getSelected(); if (!sel) return;
+  const el = document.getElementById('recentTable');
+  el.innerHTML = '<div class="hint">Đang đọc ATTLOG...</div>';
+  try {
+    const r = await fetch('/api/attlog/recent', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ip: sel.ip, limit: limit, web_ip: sel.web_ip})
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      el.innerHTML = '<div style="color:#ff8888;">' + (d.error||'Lỗi') + '</div>';
+      return;
+    }
+    let html = '<div style="margin-bottom:6px;color:#aaa;font-size:11px;">Tổng: <b style="color:#00d4ff;">' + d.count + '</b> records | Hiển thị ' + d.records.length + ' gần nhất | Nguồn: ' + d.source + (d.web_ip_used ? ' (' + d.web_ip_used + ')' : '') + '</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#1a2a3a;color:#00d4ff;"><th>#</th><th>ID</th><th>Mã NV</th><th>Họ tên</th><th>Thời gian</th><th>Trạng thái</th><th>Verify</th><th>IP</th><th>Thiết bị</th><th>Marker</th></tr></thead><tbody>';
+    d.records.forEach((r, idx) => {
+      const isMarker = r.marker && r.marker !== 'NULL' && r.marker && r.marker.length > 0;
+      const statusName = ({0:'Check-In',1:'Check-Out',2:'Break-Out',3:'Break-In',4:'OT-In',5:'OT-Out'})[r.status] || ('#'+r.status);
+      const statusColor = r.status === 0 ? '#5fff7f' : (r.status === 1 ? '#ffaa66' : '#9b00d4');
+      const verifyName = ({0:'PWD',1:'FP',15:'Card'})[r.verify_type] || ('#'+r.verify_type);
+      const verifyColor = r.verify_type === 1 ? '#5fff7f' : (r.verify_type === 0 ? '#00d4ff' : '#ffaa66');
+      const pin = r.user_id || r.pin || '?';
+      const name = r.user_name || '';
+      html += '<tr style="border-bottom:1px solid #2a3a5a;">';
+      html += '<td style="color:#888;">' + (idx+1) + '</td>';
+      html += '<td style="color:#aaa;">' + (r.id || 0) + '</td>';
+      html += '<td><b>' + pin + '</b></td>';
+      html += '<td style="color:#cfd8dc;">' + (name || '-') + '</td>';
+      html += '<td style="font-family:monospace;">' + (r.timestamp || '?') + '</td>';
+      html += '<td style="color:' + statusColor + ';">' + statusName + '</td>';
+      html += '<td style="color:' + verifyColor + ';">' + verifyName + '</td>';
+      html += '<td style="font-family:monospace;font-size:10px;">' + (r.device_ip || '?') + '</td>';
+      html += '<td style="font-size:10px;color:#888;">' + (r.device_name || r.device_ip || '?') + '</td>';
+      html += '<td style="font-size:10px;' + (isMarker ? 'color:#ffaa66;font-weight:bold;' : 'color:#666') + '">' + (r.marker || '-') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div style="color:#ff8888;">Lỗi: ' + e.message + '</div>';
+  }
+}
+
+async function pollJob(jobId, logEl, btnId) {
+  const maxIter = 60;
+  for (let i = 0; i < maxIter; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    try {
+      const r = await fetch('/api/attlog/job/' + jobId);
+      const j = await r.json();
+      if (j.status === 'done' || j.status === 'error') {
+        let html = (j.status === 'done' ? '✅ <b>Thành công!</b>\n' : '❌ <b>Lỗi:</b> ' + (j.message||'?') + '\n');
+        html += '  Started: ' + j.started_at + '\n';
+        if (j.finished_at) {
+          const dur = Math.round((new Date(j.finished_at) - new Date(j.started_at))/1000);
+          html += '  Finished: ' + j.finished_at + ' (' + dur + 's)\n\n';
+        }
+        if (j.result && j.result.log) {
+          j.result.log.forEach(l => html += '  ' + l + '\n');
+        }
+        if (j.result && j.result.new_ids) {
+          html += '\n  Records injected:\n';
+          j.result.new_ids.forEach(r => html += '    ID=' + r[0] + ' PIN=' + r[1] + ' Time=' + r[2] + ' Marker=' + r[3] + '\n');
+        }
+        if (j.result && j.result.deleted !== undefined) html += '\n  Deleted: ' + j.result.deleted + ' records\n';
+        if (j.result && j.result.edited !== undefined) html += '\n  Edited: ' + j.result.edited + ' records\n';
+        logEl.innerHTML = html;
+        document.getElementById(btnId).disabled = false;
+        return;
+      } else {
+        logEl.innerHTML = '<span class="status warn"><span class="dot"></span>' + (j.message||'Working...') + ' (' + (i*5) + 's)</span>';
+      }
+    } catch(e) {
+      logEl.innerHTML = '<span class="status warn"><span class="dot"></span>Polling: ' + e.message + '</span>';
+    }
+  }
+  logEl.innerHTML = '<div style="color:#ff8888;">Timeout chờ job</div>';
+  document.getElementById(btnId).disabled = false;
+}
+
+async function realPunch() {
+  const sel = getSelected(); if (!sel) return;
+  const pin = document.getElementById('punchPin').value.trim();
+  const status = parseInt(document.getElementById('punchStatus').value);
+  const el = document.getElementById('punchLog');
+  if (!pin) { el.innerHTML = '<div style="color:#ff8888;">Nhập mã NV</div>'; return; }
+  if (!confirm('Ghi ATTLOG thật lên máy ' + sel.ip + '?\nPIN=' + pin + ', Status=' + STATUS_NAME[status])) return;
+  el.innerHTML = '<span class="status warn"><span class="dot"></span>Bắt đầu job...</span>';
+  document.getElementById('btnPunch').disabled = true;
+  try {
+    const r = await fetch('/api/attlog/real-punch', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ip: sel.ip, pin: pin, status: status, web_ip: sel.web_ip})
+    });
+    const d = await r.json();
+    if (!d.ok) { el.innerHTML = '<div style="color:#ff8888;">Lỗi: ' + (d.error||'?') + '</div>'; document.getElementById('btnPunch').disabled = false; return; }
+    el.innerHTML = '<span class="status warn"><span class="dot"></span>Job ' + d.job_id + ' - ' + (d.message||'') + '</span>';
+    await pollJob(d.job_id, el, 'btnPunch');
+  } catch(e) {
+    el.innerHTML = '<div style="color:#ff8888;">Lỗi: ' + e.message + '</div>';
+    document.getElementById('btnPunch').disabled = false;
+  }
+}
+
+async function injectRecord() {
+  const sel = getSelected(); if (!sel) return;
+  const pin = document.getElementById('injPin').value.trim();
+  const ts = document.getElementById('injTs').value.trim();
+  const count = parseInt(document.getElementById('injCount').value) || 1;
+  const marker = document.getElementById('injMarker').value.trim();
+  const el = document.getElementById('injLog');
+  if (!pin || !ts) { el.innerHTML = '<div style="color:#ff8888;">Thiếu PIN/thời gian</div>'; return; }
+  if (!confirm('Inject ' + count + ' record lên ' + sel.ip + '?\nPIN=' + pin + '\nTime=' + ts + '\nMarker=' + marker)) return;
+  el.innerHTML = '<span class="status warn"><span class="dot"></span>Bắt đầu job...</span>';
+  document.getElementById('btnInj').disabled = true;
+  try {
+    const r = await fetch('/api/attlog/inject', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ip: sel.ip, pin: pin, timestamp: ts, marker: marker, web_ip: sel.web_ip, count: count})
+    });
+    const d = await r.json();
+    if (!d.ok) { el.innerHTML = '<div style="color:#ff8888;">Lỗi: ' + (d.error||'?') + '</div>'; document.getElementById('btnInj').disabled = false; return; }
+    el.innerHTML = '<span class="status warn"><span class="dot"></span>Job ' + d.job_id + ' - ' + (d.message||'') + '</span>';
+    await pollJob(d.job_id, el, 'btnInj');
+  } catch(e) {
+    el.innerHTML = '<div style="color:#ff8888;">Lỗi: ' + e.message + '</div>';
+    document.getElementById('btnInj').disabled = false;
+  }
+}
+
+async function deleteByMarker() {
+  const sel = getSelected(); if (!sel) return;
+  const marker = document.getElementById('delMarker').value.trim();
+  const el = document.getElementById('delLog');
+  if (!marker) { el.innerHTML = '<div style="color:#ff8888;">Nhập marker</div>'; return; }
+  if (!confirm('XÓA tất cả record có CREATE_ID="' + marker + '" trên ' + sel.ip + '?')) return;
+  el.innerHTML = '<span class="status warn"><span class="dot"></span>Bắt đầu job...</span>';
+  document.getElementById('btnDel').disabled = true;
+  try {
+    const r = await fetch('/api/attlog/delete-marker', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ip: sel.ip, marker: marker, web_ip: sel.web_ip})
+    });
+    const d = await r.json();
+    if (!d.ok) { el.innerHTML = '<div style="color:#ff8888;">Lỗi: ' + (d.error||'?') + '</div>'; document.getElementById('btnDel').disabled = false; return; }
+    el.innerHTML = '<span class="status warn"><span class="dot"></span>Job ' + d.job_id + ' - ' + (d.message||'') + '</span>';
+    await pollJob(d.job_id, el, 'btnDel');
+  } catch(e) {
+    el.innerHTML = '<div style="color:#ff8888;">Lỗi: ' + e.message + '</div>';
+    document.getElementById('btnDel').disabled = false;
+  }
+}
+
+async function editTime() {
+  const sel = getSelected(); if (!sel) return;
+  const marker = document.getElementById('editMarker').value.trim();
+  const newTime = document.getElementById('editTime').value.trim();
+  const el = document.getElementById('editLog');
+  if (!marker || !newTime) { el.innerHTML = '<div style="color:#ff8888;">Thiếu marker hoặc thời gian</div>'; return; }
+  if (!confirm('Sửa thời gian các record có marker="' + marker + '" thành ' + newTime + '?')) return;
+  el.innerHTML = '<span class="status warn"><span class="dot"></span>Bắt đầu job...</span>';
+  document.getElementById('btnEdit').disabled = true;
+  try {
+    const r = await fetch('/api/attlog/edit-time', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ip: sel.ip, marker: marker, new_time: newTime, web_ip: sel.web_ip})
+    });
+    const d = await r.json();
+    if (!d.ok) { el.innerHTML = '<div style="color:#ff8888;">Lỗi: ' + (d.error||'?') + '</div>'; document.getElementById('btnEdit').disabled = false; return; }
+    el.innerHTML = '<span class="status warn"><span class="dot"></span>Job ' + d.job_id + ' - ' + (d.message||'') + '</span>';
+    await pollJob(d.job_id, el, 'btnEdit');
+  } catch(e) {
+    el.innerHTML = '<div style="color:#ff8888;">Lỗi: ' + e.message + '</div>';
+    document.getElementById('btnEdit').disabled = false;
+  }
+}
+
+// Auto-load devices on page load
+pingAllDevices();
+</script>
+
+</body>
+</html>
