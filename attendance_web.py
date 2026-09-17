@@ -1359,80 +1359,111 @@ def _attlog_web_candidates(web_ip, device_ip=None):
 def _attlog_download_zkdb_via_protocol(device_ip, out_path, timeout_s=60):
     """Download ZKDB.db from ZK device via protocol READFILE (0x6A6) - CVE-2023-3940.
 
-    Use this as FALLBACK when web backup (CVE-2023-4587) is not reachable
-    (e.g. Sophos VPN only routes 2 IPs, but the Web UI IP is one of them).
+    Use this as FALLBACK when web backup (CVE-2023-4587) is not reachable.
     Path: /mnt/mtdblock/data/ZKDB.db (confirmed on X628 PRO FW 6.60).
     Returns the SQLite data bytes; raises RuntimeError on failure.
+
+    Note: if device is busy writing ATTLOG during download, the file may be
+    partially written -> SQLite 'database disk image is malformed'. We retry up
+    to 3 times with 1.5s sleep + integrity_check before giving up.
     """
     from zk import ZK, const
     from struct import unpack
     import socket
-    try:
-        zk = ZK(device_ip, port=4370, timeout=15, password=0)
-        conn = zk.connect()
-    except Exception as e:
-        raise RuntimeError('connect failed: {}'.format(str(e)[:80]))
-    if not conn:
-        raise RuntimeError('connect returned None')
-    try:
+    import sqlite3 as _sqlite3
+    import time as _time
+    last_err = None
+    for attempt in range(3):
         try:
-            conn.disable_device()
-        except Exception:
-            pass
-        # Send FREE_DATA first (clear any leftover buffers)
-        try:
-            conn._ZK__send_command(const.CMD_FREE_DATA, b'')
-        except Exception:
-            pass
-        import time as _time
-        _time.sleep(0.3)
-        # Send READFILE (0x6A6) with full path
-        path = b'/mnt/mtdblock/data/ZKDB.db\x00'
-        try:
-            conn._ZK__send_command(0x6A6, path, response_size=1024)
+            zk = ZK(device_ip, port=4370, timeout=15, password=0)
+            conn = zk.connect()
         except Exception as e:
-            raise RuntimeError('READFILE send failed: {}'.format(str(e)[:80]))
-        # Read chunks from raw socket
-        sock = conn._ZK__sock
-        sock.settimeout(min(15, timeout_s))
-        total = b''
-        chunks = 0
-        start = _time.time()
-        while _time.time() - start < timeout_s:
+            raise RuntimeError('connect failed: {}'.format(str(e)[:80]))
+        if not conn:
+            raise RuntimeError('connect returned None')
+        try:
             try:
-                chunk = sock.recv(65536)
-                if not chunk:
-                    break
-                if len(chunk) >= 16:
-                    top1, top2, tcp_len = unpack('<HHI', chunk[:8])
-                    zk_cmd = unpack('<H', chunk[8:10])[0]
-                    body = chunk[16:16 + (tcp_len - 8)] if tcp_len > 8 else b''
-                    total += body
-                    chunks += 1
-                    # ACK_OK or final response -> stop
-                    if zk_cmd in (0x07D0, 0x07D1, 2000, 2001):
-                        break
-                else:
-                    if chunks > 0:
-                        break
-            except socket.timeout:
-                break
+                conn.disable_device()
             except Exception:
-                break
-        if not total or total[:15] != b'SQLite format 3':
-            raise RuntimeError('not SQLite magic (got {} bytes)'.format(len(total)))
-        with open(out_path, 'wb') as f:
-            f.write(total)
-        return total
-    finally:
-        try:
-            conn.enable_device()
-        except Exception:
-            pass
-        try:
-            conn.disconnect()
-        except Exception:
-            pass
+                pass
+            # Send FREE_DATA first (clear any leftover buffers)
+            try:
+                conn._ZK__send_command(const.CMD_FREE_DATA, b'')
+            except Exception:
+                pass
+            _time.sleep(0.4)
+            # Send READFILE (0x6A6) with full path
+            path = b'/mnt/mtdblock/data/ZKDB.db\x00'
+            try:
+                conn._ZK__send_command(0x6A6, path, response_size=1024)
+            except Exception as e:
+                last_err = 'READFILE send failed: {}'.format(str(e)[:80])
+                continue
+            # Read chunks from raw socket
+            sock = conn._ZK__sock
+            sock.settimeout(min(15, timeout_s))
+            total = b''
+            chunks = 0
+            start = _time.time()
+            while _time.time() - start < timeout_s:
+                try:
+                    chunk = sock.recv(65536)
+                    if not chunk:
+                        break
+                    if len(chunk) >= 16:
+                        top1, top2, tcp_len = unpack('<HHI', chunk[:8])
+                        zk_cmd = unpack('<H', chunk[8:10])[0]
+                        body = chunk[16:16 + (tcp_len - 8)] if tcp_len > 8 else b''
+                        total += body
+                        chunks += 1
+                        # ACK_OK or final response -> stop
+                        if zk_cmd in (0x07D0, 0x07D1, 2000, 2001):
+                            break
+                    else:
+                        if chunks > 0:
+                            break
+                except socket.timeout:
+                    break
+                except Exception:
+                    break
+            if not total or total[:15] != b'SQLite format 3':
+                last_err = 'not SQLite magic (got {} bytes)'.format(len(total))
+                continue
+            # Save to disk
+            with open(out_path, 'wb') as f:
+                f.write(total)
+            # Verify SQLite integrity (catches "database disk image is malformed")
+            try:
+                db = _sqlite3.connect(out_path)
+                cur = db.cursor()
+                # PRAGMA integrity_check returns 'ok' on success, errors otherwise
+                ick = cur.execute('PRAGMA integrity_check').fetchone()
+                if not ick or ick[0] != 'ok':
+                    last_err = 'SQLite integrity_check fail: {}'.format(ick)
+                    db.close()
+                    if attempt < 2:
+                        _time.sleep(1.5)
+                        continue
+                    raise RuntimeError(last_err)
+                cnt = cur.execute('SELECT COUNT(*) FROM ATT_LOG').fetchone()[0]
+                db.close()
+                return total  # OK!
+            except _sqlite3.DatabaseError as e:
+                last_err = 'SQLite corrupted: {}'.format(str(e)[:100])
+                if attempt < 2:
+                    _time.sleep(1.5)
+                    continue
+                raise RuntimeError(last_err)
+        finally:
+            try:
+                conn.enable_device()
+            except Exception:
+                pass
+            try:
+                conn.disconnect()
+            except Exception:
+                pass
+    raise RuntimeError('Protocol download fail after 3 retries: {}'.format(last_err or 'unknown'))
 
 
 def _attlog_download_zkdb_with_fallback(web_candidates, out_path, timeout_s=8, progress_cb=None, device_ip=None):
