@@ -56,7 +56,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='AttendanceSuite-v2.0.10',
+    name='AttendanceSuite-v2.0.11',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

