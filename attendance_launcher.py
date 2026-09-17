@@ -12,7 +12,7 @@ import sys, os, threading, time, socket, atexit, signal, traceback, importlib.ut
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 
-VERSION = '2.0.12'
+VERSION = '2.0.13'
 APP_NAME = 'AttendanceSuite'
 COPYRIGHT = '(c) 2026 Dr. Nem - BVDK Ninh Thuan'
 

