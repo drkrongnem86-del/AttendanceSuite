@@ -1,0 +1,50 @@
+name: attendance_mobile
+description: "AttendanceSuite - BVĐK Ninh Thuan - Mobile attendance management with self-hosted ZK device server + VPN."
+publish_to: 'none'
+version: 2.3.0+28
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # HTTP client for talking to backend (Windows or embedded)
+  http: ^1.2.0
+
+  # Settings persistence
+  shared_preferences: ^2.2.2
+
+  # Date/time formatting
+  intl: ^0.19.0
+
+  # Self-hosted HTTP server (mirror of attendance_web.py)
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+
+  # Network discovery
+  network_tools: ^6.0.9
+  network_info_plus: ^8.2.1
+  connectivity_plus: ^7.3.1
+
+  # VPN Bệnh viện (v2.3.0: removed openvpn_flutter plugin, use native VpnService via OpenVpnClientService.kt)
+
+  # WebSocket for real-time logs (optional)
+  web_socket_channel: ^2.4.0
+
+  # SQLite for ATTLOG injection into ZKDB.db (CVE-2023-3941)
+  # sqlite3 3.x bundles native libs for all platforms including Android arm64
+  sqlite3: ^3.5.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+    - assets/vpn/

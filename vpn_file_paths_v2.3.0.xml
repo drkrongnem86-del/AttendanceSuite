@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- VPN config files (app-specific external storage - main directory) -->
+    <external-files-path
+        name="vpn_configs"
+        path="vpn/" />
+
+    <!-- VPN Downloads subfolder (created by exportOvpnToDownloads) -->
+    <external-files-path
+        name="vpn_downloads"
+        path="vpn/Downloads/" />
+
+    <!-- Downloads folder (accessible via file manager) -->
+    <external-path
+        name="downloads"
+        path="." />
+
+    <!-- Internal files -->
+    <files-path
+        name="internal_vpn"
+        path="vpn/" />
+
+    <!-- Cache -->
+    <cache-path
+        name="cache_vpn"
+        path="vpn/" />
+</paths>
