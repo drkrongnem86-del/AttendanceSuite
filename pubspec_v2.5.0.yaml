@@ -1,0 +1,25 @@
+name: attendance_mobile
+description: "AttendanceSuite - BVĐK Ninh Thuan - Thin Flutter WebView wrapper around embedded Python web server (attendance_web.py + pyzk via Chaquopy)."
+publish_to: 'none'
+version: 2.5.0+32
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # v2.5.0: WebView only - all business logic is in Python (Chaquopy)
+  webview_flutter: ^4.10.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
