@@ -1,0 +1,17 @@
+# AttendanceSuite Backend v2.6.11 - Python dependencies
+# Dung de build EXE (PyInstaller) va chay local (python attendance_web.py)
+
+# ZK device library (pyzk) - cho port 4370
+pyzk==0.9
+
+# HTTP server (stdlib nhung can cho type hints)
+# KHONG can flask/fastapi - code dung BaseHTTPRequestHandler stdlib
+
+# PDF/Excel export (su dung cho reports)
+openpyxl==3.1.2
+
+# PyInstaller - chi can khi build EXE
+pyinstaller==6.3.0
+
+# Cys dependencies (already included in pyinstaller but explicit for clarity)
+# Note: chay tren Python 3.11+ (PyInstaller supports 3.7-3.13)

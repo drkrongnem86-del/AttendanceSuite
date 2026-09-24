@@ -1,0 +1,28 @@
+IP,Type,Note,Selected
+172.16.0.30,gateway,Gateway ZK Web,0
+172.16.0.31,server,Secutime server,0
+172.16.0.200,attendance,Web UI,1
+172.16.0.212,attendance,May 1,1
+172.16.0.213,attendance,May 2,1
+172.16.0.214,attendance,May 3,1
+172.16.0.215,attendance,May 4,1
+172.16.0.217,attendance,May 5,1
+172.16.0.218,attendance,May 6 + Web,0
+172.16.0.219,attendance,May 7,1
+172.16.0.220,attendance,May 8,0
+172.16.0.221,attendance,May 9,1
+172.16.0.222,attendance,May 10,1
+172.16.0.223,attendance,May 11,1
+172.16.0.224,attendance,May 12,1
+172.16.0.225,attendance,May 13,1
+172.16.0.226,attendance,May 14,1
+172.16.0.228,attendance,May 15,1
+172.16.1.204,attendance,May 16 + Web,1
+172.16.1.210,attendance,May 17,1
+172.16.1.211,attendance,May 18,1
+172.16.1.212,attendance,May 19,1
+172.16.8.139,attendance,May 20,1
+172.16.8.140,attendance,May 21 + Web,1
+172.16.30.50,attendance,May 22 + Web,1
+172.16.100.201,attendance,May 23 + Web,1
+virtual.x628pro,virtual,Virtual X628 PRO (Simulator),1

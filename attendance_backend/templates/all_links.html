@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All endpoints - AttendanceSuite</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  min-height: 100vh;
+  color: #e2e8f0;
+  padding: 20px;
+}
+.container { max-width: 1400px; margin: 0 auto; }
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+.header h1 {
+  color: #e2e8f0;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.header h1 .ver-badge {
+  background: #3b82f6;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+.subtitle {
+  margin-top: 6px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.copyright {
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+/* Search */
+.search-bar {
+  margin-bottom: 20px;
+}
+.search-bar input {
+  width: 100%;
+  padding: 12px 16px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #e2e8f0;
+  font-family: inherit;
+}
+.search-bar input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* Section */
+.section {
+  margin-bottom: 24px;
+}
+.section-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #f1f5f9;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #334155;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title .count {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: normal;
+}
+
+/* Cards grid */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 12px;
+}
+.card {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.15s;
+}
+.card:hover {
+  border-color: #475569;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.method-badge {
+  font-family: 'Consolas', monospace;
+  font-weight: bold;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  min-width: 48px;
+  text-align: center;
+}
+.method-get { background: #16a34a; color: white; }
+.method-post { background: #f59e0b; color: #422006; }
+.method-html { background: #3b82f6; color: white; }
+
+.path {
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #60a5fa;
+  font-size: 13px;
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+}
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.desc {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+.actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.btn {
+  background: #334155;
+  color: #cbd5e1;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.1s;
+  font-family: inherit;
+}
+.btn:hover { background: #475569; }
+.btn-primary { background: #2563eb; color: white; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-warn { background: #dc2626; color: white; }
+.btn-warn:hover { background: #b91c1c; }
+.cve-badge {
+  background: #dc2626;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: bold;
+}
+.icon {
+  font-size: 16px;
+}
+.empty {
+  padding: 30px;
+  text-align: center;
+  color: #64748b;
+}
+pre {
+  background: #020617;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 11px;
+  margin-top: 6px;
+  max-height: 200px;
+  overflow: auto;
+  color: #cbd5e1;
+  display: none;
+}
+pre.show { display: block; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <h1>
+    <span class="icon">📋</span>
+    Tất cả Endpoints & Pages
+    <span class="ver-badge">v2.6.11+ATTLOG Tools</span>
+  </h1>
+  <div class="subtitle">Danh sách tất cả HTML pages và API endpoints có sẵn trong AttendanceSuite backend</div>
+  <div class="copyright">© 2026 Dr. Nểm - BVĐK Ninh Thuận | 27 thiết bị ZK + 28 attendances đang hoạt động</div>
+</div>
+
+<div class="search-bar">
+  <input type="text" id="searchBox" placeholder="🔍 Tìm endpoint (path, method, mô tả)..." oninput="filterCards()">
+</div>
+
+<!-- HTML Pages -->
+<div class="section" id="section-pages">
+  <div class="section-title">🌐 HTML Pages <span class="count">(click mở tab mới)</span></div>
+  <div class="grid" id="grid-pages"></div>
+</div>
+
+<!-- GET APIs -->
+<div class="section" id="section-get">
+  <div class="section-title">📥 GET APIs <span class="count">(JSON response - click "Test" để xem)</span></div>
+  <div class="grid" id="grid-get"></div>
+</div>
+
+<!-- POST APIs -->
+<div class="section" id="section-post">
+  <div class="section-title">📤 POST APIs <span class="count">(cần JSON body qua curl/script)</span></div>
+  <div class="grid" id="grid-post"></div>
+</div>
+
+</div>
+
+<script>
+// ====== ENDPOINTS DATA ======
+const pages = [
+  {
+    icon: '🏥',
+    title: 'Main Viewer',
+    path: '/',
+    desc: 'Trang chính - Đọc log chấm công từ 24 thiết bị ZK + Manual Attendance. Lấy log, Export CSV, Báo cáo, So sánh Shadow Log, Backup, NV quên chấm, Merge Workflow.',
+    cve: false,
+  },
+  {
+    icon: '🧭',
+    title: 'Launcher (Tab Navigation)',
+    path: '/launcher.html',
+    desc: 'Tab navigation giữa 6+ chức năng: Viewer / Simulator / Security / Punch / Inject ATTLOG / ATTLOG Tools ⭐ v2.6.11.',
+    cve: false,
+  },
+  {
+    icon: '🛡️',
+    title: 'Security Dashboard',
+    path: '/security',
+    desc: 'Quét bảo mật 28 thiết bị: Port 4370/23/80, Comm Key default, số user có password - dùng để kiểm tra CVE-2023-3941 candidates.',
+    cve: false,
+  },
+  {
+    icon: '📱',
+    title: 'Chấm công PIN + Password',
+    path: '/punch',
+    desc: 'Manual punch tool - cho BS chấm công thủ công qua port 4370 với PIN + Password (không cần vân tay/thẻ).',
+    cve: false,
+  },
+  {
+    icon: '⚙️',
+    title: 'ATTLOG Tools ⭐ v2.6.11',
+    path: '/attlog-tools',
+    desc: 'CVE-2023-3941 (UPLOAD_PICTURE path traversal) trên ZK X628 PRO FW 6.60. Đọc ATTLOG + Inject 1 record lên thiết bị + Test PIN/Password + Reboot.',
+    cve: true,
+  },
+  {
+    icon: '⚡',
+    title: 'Inject ATTLOG (v1.9.2)',
+    path: '/inject',
+    desc: 'CVE-2023-3941 inject page phiên bản cũ. Workflow: Download ZKDB.db → INSERT records → Upload via path traversal → Reboot.',
+    cve: true,
+  },
+  {
+    icon: '🔀',
+    title: 'Merge Workflow',
+    path: '/merge',
+    desc: 'So sánh Shadow Log với log thật trên thiết bị, đánh dấu reconciled/unreconciled, hỗ trợ cleanup file cũ.',
+    cve: false,
+  },
+  {
+    icon: '🚨',
+    title: 'NV quên chấm công',
+    path: '/alerts',
+    desc: 'Danh sách nhân viên có lịch làm việc nhưng KHÔNG có record chấm công trong ngày - cảnh báo.',
+    cve: false,
+  },
+  {
+    icon: '📊',
+    title: 'Live Status Page',
+    path: '/api/live/page',
+    desc: 'Real-time device online/offline status dashboard, refresh mỗi 5s.',
+    cve: false,
+  },
+];
+
+const getApis = [
+  {
+    icon: '🔍',
+    title: 'Server Diag',
+    path: '/api/diag',
+    desc: 'Thông tin server: version, primary IP, FQDN, host, số devices đang quản lý.',
+  },
+  {
+    icon: '📡',
+    title: 'Devices List',
+    path: '/api/devices',
+    desc: 'Danh sách tất cả thiết bị với status fetch: 27 cham cong + 0 ky van tay + 3 khac.',
+  },
+  {
+    icon: '📊',
+    title: 'Live Status',
+    path: '/api/live',
+    desc: 'Online/offline status real-time của tất cả thiết bị (cập nhật mỗi 20s).',
+  },
+  {
+    icon: '🖥️',
+    title: 'Fetch Status',
+    path: '/api/status',
+    desc: 'Trạng thái task fetch logs đang chạy: running/progress/cancel_requested.',
+  },
+  {
+    icon: '📋',
+    title: 'All Records',
+    path: '/api/records',
+    desc: 'Tất cả records đã fetch (in-memory). Có thể rất lớn nếu fetch nhiều ngày.',
+  },
+  {
+    icon: '🔐',
+    title: 'Security Scan',
+    path: '/api/security/scan',
+    desc: 'Quét 28 thiết bị về CVE-2023-3941: Port 4370/23/80 open, Comm Key=0, FW, số user có password.',
+  },
+  {
+    icon: '⚡',
+    title: 'Inject Devices',
+    path: '/api/inject/devices',
+    desc: 'Danh sách thiết bị mục tiêu cho inject ATTLOG + online status (TCP check port 4370).',
+  },
+  {
+    icon: '📜',
+    title: 'Inject Jobs',
+    path: '/api/inject/jobs',
+    desc: 'Tất cả ATTLOG injection jobs (50 jobs gần nhất, sorted by created_at desc).',
+  },
+  {
+    icon: '📜',
+    title: 'Inject History',
+    path: '/api/inject/history',
+    desc: 'Lịch sử ATTLOG injections đã chạy, trạng thái SUCCESS/FAILED/EXCEPTION/UPLOAD_FAILED.',
+  },
+  {
+    icon: '🔧',
+    title: 'ZK Device Info',
+    path: '/api/zk/info?ip=172.16.0.200',
+    desc: 'Thông tin chi tiết thiết bị qua pyzk port 4370: FW, Serial, Platform, Model, User count, Attlog count, Face count.',
+    dynamic: 'Cần query: ?ip=<IP>',
+  },
+  {
+    icon: '📋',
+    title: 'ZK ATTLOG Records',
+    path: '/api/zk/attlog?ip=172.16.0.200&limit=20',
+    desc: 'Đọc N records ATTLOG gần nhất từ thiết bị qua port 4370 (sort by timestamp desc).',
+    dynamic: 'Cần query: ?ip=<IP>&limit=N (max 5000)',
+  },
+  {
+    icon: '👤',
+    title: 'Test PIN + Password',
+    path: '/api/zk/test_user?ip=172.16.0.200&pin=1',
+    desc: 'Check PIN có tồn tại trên thiết bị qua pyzk get_users(). Trả về name, privilege, card, password nếu có.',
+    dynamic: 'Cần query: ?ip=<IP>&pin=<PIN>',
+  },
+  {
+    icon: '💾',
+    title: 'Backup Status',
+    path: '/api/backup/status',
+    desc: 'Danh sách backups hiện có (date folders trong backups/). Mỗi folder chứa ZKDB.db + attendance_web.db backup.',
+  },
+  {
+    icon: '📋',
+    title: 'Daily Report',
+    path: '/api/report/daily',
+    desc: 'Báo cáo chấm công theo ngày. Cần ?date=YYYY-MM-DD query param.',
+    dynamic: 'Cần query: ?date=YYYY-MM-DD (mặc định hôm nay)',
+  },
+  {
+    icon: '📋',
+    title: 'Today Report',
+    path: '/api/report/today',
+    desc: 'Báo cáo chấm công hôm nay (nhanh nhất).',
+  },
+  {
+    icon: '📑',
+    title: 'Excel Export',
+    path: '/api/report/export',
+    desc: 'Export báo cáo ra file Excel. Cần ?date=YYYY-MM-DD query param.',
+    dynamic: 'Cần query: ?date=YYYY-MM-DD',
+  },
+  {
+    icon: '🚨',
+    title: 'Missing Punches',
+    path: '/api/alerts/missing',
+    desc: 'Danh sách NV có lịch làm việc nhưng không chấm công. Cần ?date=YYYY-MM-DD.',
+    dynamic: 'Cần query: ?date=YYYY-MM-DD',
+  },
+];
+
+const postApis = [
+  {
+    icon: '⬇',
+    title: 'Fetch Logs',
+    path: '/api/fetch',
+    desc: 'Khởi động fetch ATTLOG từ nhiều devices. JSON body: {"ips":["172.16.0.200"], "dateFrom":"2026-09-20", "dateTo":"2026-09-24"}',
+    bodyExample: '{"ips":["172.16.0.200","172.16.0.219"], "dateFrom":"2026-09-20", "dateTo":"2026-09-24"}',
+  },
+  {
+    icon: '⏹',
+    title: 'Cancel Fetch',
+    path: '/api/cancel',
+    desc: 'Cancel fetch đang chạy. Body: {}',
+    bodyExample: '{}',
+  },
+  {
+    icon: '📱',
+    title: 'Remote Punch (Queue)',
+    path: '/api/remote-punch',
+    desc: 'Queue punch vào pending_punches.csv - service sẽ sync lên Secutime. Body: {"user_id":"40","status":0,"punch":0,"device_ip":"172.16.0.212"}',
+    bodyExample: '{"user_id":"40","status":0,"punch":0,"device_ip":"172.16.0.212"}',
+  },
+  {
+    icon: '⚡',
+    title: 'Inject ATTLOG',
+    path: '/api/inject/attlog',
+    desc: 'CVE-2023-3941 - inject 1 record lên thiết bị. Body đầy đủ: {"device_ip", "pin", "count":1, "verify_mode", "timestamp", "status", "no_reboot", "marker", "note"}',
+    bodyExample: '{"device_ip":"172.16.0.200","pin":"1","count":1,"verify_mode":1,"status":0,"marker":"BS_CONFIRMED"}',
+  },
+  {
+    icon: '✋',
+    title: 'Manual Punch',
+    path: '/api/punch/manual',
+    desc: 'Manual punch qua port 4370 với PIN+Password. Body: {"user_id":"40","password":"1234","device_ip":"172.16.0.212"}',
+    bodyExample: '{"user_id":"40","password":"1234","device_ip":"172.16.0.212"}',
+  },
+  {
+    icon: '💾',
+    title: 'Trigger Backup',
+    path: '/api/backup/now',
+    desc: 'Trigger backup ngay lập tức. Body: {"include_attendance":true}',
+    bodyExample: '{"include_attendance":true}',
+  },
+  {
+    icon: '🔄',
+    title: 'Reboot Device',
+    path: '/api/zk/reboot',
+    desc: 'POST hoặc GET - reboot ZK device qua port 4370. Query: ?ip=<IP>. ⚠️ 30s downtime.',
+    bodyExample: 'QUERY: ?ip=172.16.0.200',
+  },
+  {
+    icon: '💾',
+    title: 'Save Devices State',
+    path: '/api/devices/save',
+    desc: 'Lưu type/note/selected của devices từ frontend. Body: {"devices":[{"ip":"172.16.0.200","type":"CC","note":"...","selected":true}]}',
+    bodyExample: '{"devices":[{"ip":"172.16.0.200","type":"CC","note":"May 1","selected":true}]}',
+  },
+  {
+    icon: '🔀',
+    title: 'Merge Mark Done',
+    path: '/api/merge/mark-done',
+    desc: 'Mark 1 record là reconciled. Body: {"date":"2026-09-24","user_id":"40"}',
+    bodyExample: '{"date":"2026-09-24","user_id":"40"}',
+  },
+  {
+    icon: '🗑',
+    title: 'Merge Clear Old',
+    path: '/api/merge/clear-old',
+    desc: 'Xóa records cũ. Body: {"before_date":"2026-01-01"}',
+    bodyExample: '{"before_date":"2026-01-01"}',
+  },
+];
+
+// ====== RENDER ======
+function renderCards(items, containerId, isApi) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  if (items.length === 0) {
+    container.innerHTML = '<div class="empty">Không có kết quả phù hợp</div>';
+    return;
+  }
+  for (const item of items) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.search = (item.title + ' ' + item.path + ' ' + item.desc).toLowerCase();
+    const methodClass = isApi === 'get' ? 'method-get' : (isApi === 'post' ? 'method-post' : 'method-html');
+    const methodText = isApi === 'get' ? 'GET' : (isApi === 'post' ? 'POST' : 'HTML');
+
+    const actions = isApi === 'get' ? `
+      <div class="actions">
+        <a href="${item.path}" target="_blank" class="btn btn-primary">🔗 Open</a>
+        <button class="btn" onclick="testEndpoint(this, '${item.path}')">▶ Test (JSON)</button>
+        <button class="btn" onclick="copyCurl('${item.path}')">📋 Copy curl</button>
+      </div>
+      <pre></pre>
+    ` : isApi === 'post' ? `
+      <div class="actions">
+        <button class="btn" onclick="copyCurl('${item.path}', \`${item.bodyExample || ''}\`)">📋 Copy curl cmd</button>
+        ${item.bodyExample ? `<button class="btn" onclick="toggleBodyExample(this)">📝 Body example</button>` : ''}
+      </div>
+      ${item.bodyExample ? `<pre>${escapeHtml(item.bodyExample)}</pre>` : ''}
+    ` : `
+      <div class="actions">
+        <a href="${item.path}" target="_blank" class="btn btn-primary">🔗 Open in new tab</a>
+        ${item.path === '/attlog-tools' || item.path === '/inject' ? `<a href="${item.path}" class="btn btn-warn" target="_blank">⚡ Mở trực tiếp</a>` : ''}
+      </div>
+    `;
+
+    card.innerHTML = `
+      <div class="card-head">
+        <span class="method-badge ${methodClass}">${methodText}</span>
+        <span class="path">${item.path}</span>
+      </div>
+      <div class="title">
+        <span>${item.icon}</span>
+        <span>${item.title}</span>
+        ${item.cve ? '<span class="cve-badge">CVE-2023-3941</span>' : ''}
+      </div>
+      <div class="desc">${item.desc}</div>
+      ${actions}
+    `;
+    container.appendChild(card);
+  }
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+renderCards(pages, 'grid-pages', 'html');
+renderCards(getApis, 'grid-get', 'get');
+renderCards(postApis, 'grid-post', 'post');
+
+// ====== FILTER ======
+function filterCards() {
+  const q = document.getElementById('searchBox').value.toLowerCase().trim();
+  document.querySelectorAll('.section').forEach(section => {
+    let visible = 0;
+    section.querySelectorAll('.card').forEach(card => {
+      const match = !q || card.dataset.search.includes(q);
+      card.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+  });
+}
+
+// ====== TEST ENDPOINT (GET only) ======
+async function testEndpoint(btn, path) {
+  const pre = btn.parentElement.parentElement.querySelector('pre');
+  pre.classList.add('show');
+  pre.textContent = 'Loading...';
+  btn.disabled = true;
+  btn.textContent = '⏳ Loading...';
+  try {
+    const r = await fetch(path, {cache: 'no-store'});
+    const ct = r.headers.get('content-type') || '';
+    if (ct.includes('json')) {
+      const data = await r.json();
+      pre.textContent = JSON.stringify(data, null, 2);
+    } else {
+      const text = await r.text();
+      pre.textContent = text.substring(0, 500) + (text.length > 500 ? '... (truncated)' : '');
+    }
+  } catch (e) {
+    pre.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Test (JSON)';
+  }
+}
+
+// ====== COPY CURL ======
+function copyCurl(path, body) {
+  let cmd;
+  if (body && body.trim()) {
+    if (body.startsWith('QUERY:')) {
+      cmd = 'curl "http://localhost:8080' + path + '"';
+    } else {
+      const escapedBody = body.replace(/'/g, "\\'");
+      cmd = "curl -X POST 'http://localhost:8080" + path + "' -H 'Content-Type: application/json' -d '" + escapedBody + "'";
+    }
+  } else {
+    cmd = 'curl "http://localhost:8080' + path + '"';
+  }
+  navigator.clipboard.writeText(cmd).then(() => {
+    alert('Copied to clipboard:\n\n' + cmd);
+  }).catch(() => {
+    prompt('Copy this command:', cmd);
+  });
+}
+
+function toggleBodyExample(btn) {
+  const pre = btn.parentElement.parentElement.querySelector('pre');
+  if (pre) {
+    pre.classList.toggle('show');
+    btn.textContent = pre.classList.contains('show') ? '📝 Hide example' : '📝 Body example';
+  }
+}
+</script>
+</body>
+</html>

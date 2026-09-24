@@ -1,0 +1,451 @@
+# GitHub Actions: Build APK (arm64) + AAB + IPA + EXE + Auto-release
+#
+# AttendanceSuite - BVĐK Ninh Thuận (Dr. Nểm - Bác sĩ Cấp Cứu)
+# Repo: https://github.com/drkrongnem86-del/AttendanceSuite
+#
+# 4 JOBS song song:
+#   1. build-apk     - Android APK arm64 (Samsung A17 - direct install)
+#   2. build-aab     - Android AAB universal (Google Play Store)
+#   3. build-ipa     - iOS IPA (macOS runner - optional, skip nếu thiếu Apple certs)
+#   4. build-exe     - Windows EXE (PyInstaller onefile - BV PC silent installer)
+#
+# Workflow:
+#   1. git tag v2.7.4
+#   2. git push origin v2.7.4
+#   3. Action tự động build 4 jobs → tạo GitHub Release với APK + AAB + IPA + EXE
+#   4. Auto-update version.json cho in-app updater
+#
+# OPTIONAL - Add GitHub Secrets để sign với release keystore (matching cert SHA-1):
+#   ANDROID_KEYSTORE_BASE64    (paste từ release.keystore encode base64)
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_PASSWORD
+#   ANDROID_KEY_ALIAS
+# Neu KHÔNG add → APK sẽ là debug-signed, user cần gỡ app cũ trước khi cài mới
+#
+# Trigger: push tag v*.*.* HOẶC manual workflow_dispatch
+
+name: Build Release (APK + AAB + IPA + EXE)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (vd: 2.7.4) - phải khớp pubspec.yaml'
+        required: true
+        default: '2.7.4'
+
+env:
+  FLUTTER_VERSION: '3.41.7'
+  JAVA_VERSION: '17'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ============================================================
+  # JOB 1: ANDROID - APK arm64 (Samsung A17 direct install)
+  # ============================================================
+  build-apk:
+    name: 📦 Build APK (arm64 - Samsung A17)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔧 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: 📦 Get dependencies
+        working-directory: attendance_mobile
+        run: flutter pub get
+
+      # Optional: Decode release keystore tu secrets (neu co)
+      - name: 🔐 Decode release keystore
+        id: keystore
+        continue-on-error: true
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:KEYSTORE_B64)) {
+            Write-Host "::notice::ANDROID_KEYSTORE_BASE64 secret not set - skipping release keystore (build se dung debug keystore)"
+            exit 0
+          }
+          try {
+            $keystoreBytes = [System.Convert]::FromBase64String($env:KEYSTORE_B64)
+            [System.IO.File]::WriteAllBytes("$env:RUNNER_TEMP\attendance-mobile-release.jks", $keystoreBytes)
+            "keystore_path=$env:RUNNER_TEMP\attendance-mobile-release.jks" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+            Write-Host "::notice::Release keystore decoded"
+          } catch {
+            Write-Host "::warning::Failed to decode keystore: $_"
+            exit 0
+          }
+
+      - name: 📝 Generate key.properties
+        if: ${{ steps.keystore.outputs.keystore_path }}
+        working-directory: attendance_mobile
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          $content = "storePassword=$env:KEYSTORE_PASSWORD`nkeyPassword=$env:KEY_PASSWORD`nkeyAlias=$env:KEY_ALIAS`nstoreFile=${{ steps.keystore.outputs.keystore_path }}"
+          Set-Content -Path android/key.properties -Value $content -Encoding UTF8
+          Write-Host "::notice::android/key.properties generated"
+
+      - name: 🏗️ Build APK (arm64 only)
+        working-directory: attendance_mobile
+        run: |
+          $keyProps = "android\key.properties"
+          $storeFile = $null
+          if (Test-Path $keyProps) {
+            Get-Content $keyProps | ForEach-Object {
+              if ($_ -match '^storeFile=(.+)$') { $storeFile = $Matches[1].Trim() }
+            }
+          }
+          if ($storeFile) {
+            Write-Host "::notice::✅ Release keystore detected → APK sign bằng release keystore (cùng SHA-1)"
+          } else {
+            Write-Host "::warning::⚠️ ANDROID_KEYSTORE_* secrets chưa add → APK sẽ sign bằng Android Debug keystore"
+            Write-Host "::warning::   → Cài đè KHÔNG được lên bản release-signed cũ - phải gỡ app trước"
+            Write-Host "::warning::   → Fix: add 4 secrets (ANDROID_KEYSTORE_*) vào repo Settings → Secrets → Actions"
+          }
+          flutter build apk --release --target-platform=android-arm64
+
+      - name: 📤 Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: attendance-mobile-apk-arm64
+          path: attendance_mobile/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 90
+
+  # ============================================================
+  # JOB 2: ANDROID - AAB (Google Play Store format)
+  # ============================================================
+  build-aab:
+    name: 📦 Build AAB (Google Play)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: 📦 Get dependencies
+        working-directory: attendance_mobile
+        run: flutter pub get
+
+      - name: 🏗️ Build AAB (universal)
+        working-directory: attendance_mobile
+        run: flutter build appbundle --release
+
+      - name: 📤 Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: attendance-mobile-aab
+          path: attendance_mobile/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 90
+
+  # ============================================================
+  # JOB 3: iOS - IPA (TestFlight / App Store)
+  # Optional - skip neu thieu Apple certs
+  # ============================================================
+  build-ipa:
+    name: 🍎 Build IPA (iOS - macOS) - optional
+    runs-on: macos-latest
+    timeout-minutes: 60
+    continue-on-error: true  # Không block Create Release khi iOS thiếu certs
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔧 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: 📦 Get dependencies
+        working-directory: attendance_mobile
+        run: flutter pub get
+
+      - name: 🍎 Set iOS deployment target
+        working-directory: attendance_mobile/ios
+        run: |
+          if [ -f "Podfile" ]; then
+            sed -i '' 's/# platform :ios, .*/platform :ios, "13.0"/' Podfile || true
+          fi
+
+      - name: 📦 Install CocoaPods
+        working-directory: attendance_mobile/ios
+        run: pod install --repo-update
+        env:
+          LC_ALL: en_US.UTF-8
+
+      - name: 🏗️ Build IPA (no-codesign)
+        working-directory: attendance_mobile
+        run: |
+          flutter build ios --release --no-codesign --export-method=development
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r "Runner.ipa" Payload
+
+      - name: 📤 Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: attendance-mobile-ipa
+          path: attendance_mobile/build/ios/iphoneos/Runner.ipa
+          if-no-files-found: warn  # Không fail nếu IPA build lỗi
+          retention-days: 90
+
+  # ============================================================
+  # JOB 4: WINDOWS - EXE (PyInstaller onefile - BV PC backend)
+  # ============================================================
+  build-exe:
+    name: 🖥️ Build EXE (Windows - PyInstaller)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        working-directory: attendance_backend
+        run: |
+          python -m pip install --upgrade pip
+          # Install runtime deps + pyinstaller (skip pyinstaller nếu quá nặng)
+          pip install -r requirements.txt
+
+      - name: 📋 Verify zk/ folder
+        working-directory: attendance_backend
+        run: |
+          if (Test-Path "zk") {
+            Write-Host "::notice::zk/ folder exists, will be bundled"
+            Get-ChildItem zk
+          } else {
+            Write-Host "::notice::zk/ folder missing - pyzk will be installed via pip"
+          }
+
+      - name: 🏗️ Build EXE (PyInstaller onefile)
+        working-directory: attendance_backend
+        run: |
+          $VERSION = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME -replace '^v','' } else { 'dev' }
+          Write-Host "Building AttendanceSuite-v$VERSION.exe"
+          # PyInstaller onefile - noconsole = silent backend server
+          pyinstaller --noconfirm --onefile --noconsole `
+            --name "AttendanceSuite-v$VERSION" `
+            --add-data "templates;templates" `
+            --add-data "devices.csv;." `
+            --add-data "config.json;." `
+            --hidden-import=zk `
+            --hidden-import=zk.base `
+            --hidden-import=zk.const `
+            --hidden-import=zk.attendance `
+            --hidden-import=zk.user `
+            --hidden-import=zk.finger `
+            --hidden-import=openpyxl `
+            --collect-all openpyxl `
+            --collect-all zk `
+            --clean `
+            attendance_web.py
+          Write-Host "::notice::Built dist/AttendanceSuite-v$VERSION.exe"
+          Get-ChildItem dist
+
+      - name: 📤 Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: attendance-backend-exe
+          path: attendance_backend/dist/AttendanceSuite-*.exe
+          if-no-files-found: error
+          retention-days: 90
+
+  # ============================================================
+  # JOB 5: GITHUB RELEASE - tạo release tự động khi push tag
+  # Bao gồm: APK arm64 + AAB + IPA + EXE
+  # ============================================================
+  create-release:
+    name: 🚀 Create GitHub Release
+    needs: [build-apk, build-aab, build-exe]  # IPA optional (continue-on-error)
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: 📥 Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          continue-on-error: true  # iOS artifact có thể không có
+
+      - name: 📋 List artifacts
+        run: |
+          echo "=== Artifacts downloaded ==="
+          ls -la artifacts/ 2>/dev/null || echo "No artifacts dir"
+          for d in artifacts/*/; do
+            if [ -d "$d" ]; then
+              echo "--- $d ---"
+              ls -la "$d"
+            fi
+          done
+
+      - name: 🏷️ Rename files theo version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          # APK: app-release.apk → AttendanceSuite_v${VERSION}_arm64.apk
+          if [ -f "artifacts/attendance-mobile-apk-arm64/app-release.apk" ]; then
+            mv -v "artifacts/attendance-mobile-apk-arm64/app-release.apk" "artifacts/attendance-mobile-apk-arm64/AttendanceSuite_v${VERSION}_arm64.apk" || true
+          fi
+          # IPA
+          if [ -f "artifacts/attendance-mobile-ipa/Runner.ipa" ]; then
+            mv -v "artifacts/attendance-mobile-ipa/Runner.ipa" "artifacts/attendance-mobile-ipa/AttendanceSuite_v${VERSION}.ipa" || true
+          fi
+          # EXE - already named with version
+          ls -la artifacts/*/
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## AttendanceSuite ${{ github.ref_name }}
+
+            **Backend v2.6.11** (Python + PyInstaller EXE)
+            **APK v2.7.4+47** (Flutter mobile)
+
+            ### Tính năng chính:
+            - Đọc log chấm công từ 27 máy X628 PRO
+            - Live Status (ping/latency 30 thiết bị)
+            - LAN scan trực tiếp (BV WiFi only)
+            - ATTLOG Tools + ZK Tools (info/attlog/test PIN/reboot)
+            - Inject ATTLOG qua CVE-2023-3941 + Jobs monitor
+            - Tab API: index 37 endpoints với Test JSON + Open Chrome
+            - VPN Sophos BV Ninh Thuận (native)
+            - Manual ATTLOG entry (không cần máy thật)
+            - Auto-detect backend với quick switch 3 URLs
+
+            ### Downloads:
+            - **attendance-mobile-arm64** APK: cài đè lên bản cũ (cert SHA-1: `5d54b3cf...F6C5`)
+            - **app-release.aab**: upload lên Google Play Store
+            - **AttendanceSuite-v2.6.11.exe**: silent installer cho PC BV
+            - **AttendanceSuite_v*_arm64.apk**: APK đã rename
+
+            ⚠️ Nếu APK build bị debug-signed (không có secrets), cần GỠ APP CŨ trước khi cài.
+          files: |
+            artifacts/attendance-mobile-apk-arm64/AttendanceSuite_*.apk
+            artifacts/attendance-mobile-aab/app-release.aab
+            artifacts/attendance-mobile-ipa/AttendanceSuite_*.ipa
+            artifacts/attendance-backend-exe/AttendanceSuite-*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================
+  # JOB 6: AUTO-UPDATE version.json
+  # File version.json được app đọc để check update in-app
+  # ============================================================
+  update-version-json:
+    name: 📝 Update version.json
+    needs: [create-release]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: 📥 Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📝 Write version.json
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          echo "New version: $VERSION"
+          APK_URL="https://github.com/${REPO}/releases/download/${TAG_NAME}/AttendanceSuite_v${VERSION}_arm64.apk"
+          EXE_URL="https://github.com/${REPO}/releases/download/${TAG_NAME}/AttendanceSuite-v${VERSION}.exe"
+          echo "APK URL: $APK_URL"
+          echo "EXE URL: $EXE_URL"
+          # Lấy message từ CHANGELOG.md (nếu có)
+          if [ -f "CHANGELOG.md" ]; then
+            MESSAGE=$(awk "/^## v$VERSION/{flag=1; next} /^## v/{flag=0} flag" CHANGELOG.md | head -3 | sed 's/^[[:space:]]*//' | tr '\n' ' ' | head -c 300)
+            [ -z "$MESSAGE" ] && MESSAGE="Cập nhật phiên bản $VERSION"
+          else
+            MESSAGE="Cập nhật phiên bản $VERSION"
+          fi
+          echo "Message: $MESSAGE"
+          cat > version.json <<EOF
+          {
+            "version": "$VERSION",
+            "apk_url": "$APK_URL",
+            "exe_url": "$EXE_URL",
+            "message": "$MESSAGE"
+          }
+          EOF
+          echo "--- version.json content ---"
+          cat version.json
+
+      - name: 📤 Commit + push version.json to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          if git diff --staged --quiet; then
+            echo "No version.json changes to commit"
+          else
+            git commit -m "chore: auto-update version.json to ${{ github.ref_name }}"
+            git push origin main
+            echo "✅ version.json pushed to main"
+          fi

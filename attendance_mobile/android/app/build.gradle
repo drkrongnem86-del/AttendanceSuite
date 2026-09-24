@@ -1,0 +1,78 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+    // v2.5.0: Chaquopy for Python runtime in Android
+    id "com.chaquo.python"
+}
+
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace = "com.bvdk.attendance_mobile"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        applicationId = "com.bvdk.attendance_mobile"
+        minSdkVersion = flutter.minSdkVersion   // Chaquopy 15 requires minSdk 21+
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+        // Restrict to arm64 only for smaller APK (per user request)
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias = keystoreProperties['keyAlias']
+                keyPassword = keystoreProperties['keyPassword']
+                storeFile = file(keystoreProperties['storeFile'])
+                storePassword = keystoreProperties['storePassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.release
+            } else {
+                signingConfig = signingConfigs.debug
+            }
+        }
+    }
+}
+
+// v2.5.0: Chaquopy configuration
+// Python source files in src/main/python/ are auto-detected and bundled.
+// Pure-Python deps (zk package) are bundled in src/main/python/zk/.
+// No pip install needed - we ship everything.
+chaquopy {
+    defaultConfig {
+        version "3.12"   // Chaquopy 17 supports 3.10-3.14
+    }
+    // Chaquopy 17 auto-downloads Python interpreter for bytecode compile
+    // (or reads $CHAQUOPY_PYTHON_PATH env var if set)
+}
+
+flutter {
+    source = "../.."
+}

@@ -1,0 +1,315 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inject ATTLOG tu xa (CVE-2023-3941)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #f5f7fa; color: #1a202c; padding: 20px; }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { color: #2d3748; margin-bottom: 20px; }
+  .cve-badge { display: inline-block; background: #e53e3e; color: white;
+               padding: 4px 10px; border-radius: 4px; font-size: 12px;
+               font-weight: bold; margin-left: 10px; vertical-align: middle; }
+  .card { background: white; border-radius: 8px; padding: 20px;
+          margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  .card h2 { margin-bottom: 15px; color: #2d3748; font-size: 18px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px;
+          color: #4a5568; }
+  input, select { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0;
+                  border-radius: 6px; font-size: 14px; }
+  input:focus, select:focus { outline: none; border-color: #4299e1; }
+  button { padding: 10px 20px; border: none; border-radius: 6px;
+           font-size: 14px; font-weight: 600; cursor: pointer;
+           transition: all 0.2s; }
+  .btn-primary { background: #4299e1; color: white; }
+  .btn-primary:hover { background: #3182ce; }
+  .btn-danger { background: #e53e3e; color: white; }
+  .btn-danger:hover { background: #c53030; }
+  .btn-secondary { background: #edf2f7; color: #4a5568; }
+  .btn-secondary:hover { background: #e2e8f0; }
+  .device-list { max-height: 300px; overflow-y: auto; }
+  .device-item { padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;
+                 margin-bottom: 5px; cursor: pointer; transition: all 0.2s;
+                 display: flex; justify-content: space-between; align-items: center; }
+  .device-item:hover { background: #edf2f7; }
+  .device-item.selected { background: #bee3f8; border-color: #4299e1; }
+  .online { color: #38a169; font-weight: bold; }
+  .offline { color: #e53e3e; font-weight: bold; }
+  .log-area { background: #1a202c; color: #e2e8f0; padding: 15px;
+              border-radius: 6px; font-family: 'Consolas', monospace;
+              font-size: 12px; max-height: 400px; overflow-y: auto;
+              white-space: pre-wrap; }
+  .log-line { margin-bottom: 2px; }
+  .log-success { color: #68d391; }
+  .log-error { color: #fc8181; }
+  .log-warn { color: #fbd38d; }
+  .progress-bar { background: #e2e8f0; border-radius: 4px; height: 8px;
+                  overflow: hidden; margin: 10px 0; }
+  .progress-fill { background: #4299e1; height: 100%; transition: width 0.3s; }
+  .status-badge { display: inline-block; padding: 4px 10px; border-radius: 12px;
+                  font-size: 12px; font-weight: bold; }
+  .status-pending { background: #fefcbf; color: #975a16; }
+  .status-running { background: #bee3f8; color: #2c5282; }
+  .status-completed { background: #c6f6d5; color: #22543d; }
+  .status-failed { background: #fed7d7; color: #742a2a; }
+  .warning-box { background: #fef5e7; border: 1px solid #f6ad55; border-radius: 6px;
+                 padding: 12px; margin-bottom: 15px; color: #7c2d12; font-size: 13px; }
+  .info-box { background: #e6fffa; border: 1px solid #38b2ac; border-radius: 6px;
+              padding: 12px; margin-bottom: 15px; color: #234e52; font-size: 13px; }
+  .info-box b { color: #285e61; }
+  .history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .history-table th, .history-table td { padding: 8px; text-align: left;
+                                          border-bottom: 1px solid #e2e8f0; }
+  .history-table th { background: #edf2f7; font-weight: 600; }
+  .badge-online { background: #c6f6d5; color: #22543d; padding: 2px 6px;
+                  border-radius: 4px; font-size: 11px; }
+  .badge-offline { background: #fed7d7; color: #742a2a; padding: 2px 6px;
+                   border-radius: 4px; font-size: 11px; }
+  code { background: #edf2f7; padding: 2px 6px; border-radius: 3px;
+         font-family: 'Consolas', monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Inject ATTLOG tu xa <span class="cve-badge">CVE-2023-3941</span></h1>
+
+  <div class="warning-box">
+    <b>CANH BAO:</b> Cong cu nay su dung <code>UPLOAD_PICTURE 0x272B + path traversal</code>
+    de ghi file ZKDB.db truc tiep vao firmware. Toan bo ZKDB.db bi thay the
+    (mat records moi tu sau web backup). Thiet bi se reboot 25 giay.
+  </div>
+
+  <div class="info-box">
+    <b>Workflow:</b> Download ZKDB.db tu web (CVE-2023-4587)
+    → SQLite INSERT records → Upload qua port 4370 + path traversal → Reboot
+    → Records xuat hien tren thiet bi that.
+  </div>
+
+  <div class="card">
+    <h2>1. Chon thiet bi</h2>
+    <button class="btn-secondary" onclick="loadDevices()">Re-check Online</button>
+    <div id="deviceList" class="device-list" style="margin-top: 15px;">
+      <em>Dang tai...</em>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Tham so inject</h2>
+    <div class="grid-3">
+      <div>
+        <label>PIN NV:</label>
+        <input type="text" id="pinInput" value="1">
+      </div>
+      <div>
+        <label>So records can inject:</label>
+        <input type="number" id="countInput" value="3" min="1" max="100">
+      </div>
+      <div>
+        <label>Verify mode:</label>
+        <select id="verifyModeInput">
+          <option value="1">1 = Fingerprint</option>
+          <option value="0">0 = Password</option>
+          <option value="2">2 = Card (RFID)</option>
+          <option value="15">15 = Multi-verify</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid" style="margin-top: 15px;">
+      <div>
+        <label>Thời gian (để trống = hiện tại):</label>
+        <input type="datetime-local" id="timestampInput" step="1">
+        <small style="color: #718096;">Click vào ô để chọn ngày giờ qua lịch</small>
+      </div>
+      <div>
+        <label>Status:</label>
+        <select id="statusInput">
+          <option value="0">0 = CHECK-IN</option>
+          <option value="1">1 = CHECK-OUT</option>
+          <option value="2">2 = BREAK-OUT</option>
+          <option value="3">3 = BREAK-IN</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top: 15px;">
+      <label>
+        <input type="checkbox" id="noRebootInput">
+        Khong reboot (chi upload, can reboot thu cong)
+      </label>
+      <label style="margin-left: 20px;">
+        <input type="checkbox" id="dryRunInput">
+        Dry run (chi inject SQLite, khong upload)
+      </label>
+    </div>
+    <button class="btn-danger" onclick="startInject()" style="margin-top: 15px;">
+      BAT DAU INJECT
+    </button>
+  </div>
+
+  <div class="card">
+    <h2>3. Job hien tai</h2>
+    <div id="currentJob">
+      <em>Chua co job nao</em>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>4. Lich su inject</h2>
+    <button class="btn-secondary" onclick="loadHistory()">Refresh</button>
+    <div id="historyList" style="margin-top: 15px;">
+      <em>Dang tai...</em>
+    </div>
+  </div>
+</div>
+
+<script>
+let selectedIP = null;
+
+async function loadDevices() {
+  const el = document.getElementById('deviceList');
+  el.innerHTML = '<em>Dang scan online status...</em>';
+  try {
+    const resp = await fetch('/api/inject/devices');
+    const data = await resp.json();
+    if (data.error) { el.innerHTML = 'Error: ' + data.error; return; }
+    if (!data.devices || data.devices.length === 0) {
+      el.innerHTML = 'Khong co thiet bi nao trong devices.csv';
+      return;
+    }
+    let html = '';
+    for (const d of data.devices) {
+      const statusBadge = d.online
+        ? '<span class="badge-online">ONLINE</span>'
+        : '<span class="badge-offline">OFFLINE</span>';
+      html += `<div class="device-item ${selectedIP === d.ip ? 'selected' : ''}"
+                    onclick="selectDevice('${d.ip}', this)">
+                 <div><b>${d.ip}</b> - ${d.note}</div>
+                 <div>${statusBadge}</div>
+               </div>`;
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = 'Error: ' + e.message;
+  }
+}
+
+function selectDevice(ip, el) {
+  selectedIP = ip;
+  document.querySelectorAll('.device-item').forEach(d => d.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+async function startInject() {
+  if (!selectedIP) {
+    alert('Vui long chon thiet bi truoc');
+    return;
+  }
+  // Convert datetime-local (e.g. "2026-09-17T09:00:00") to ISO format
+  let tsValue = document.getElementById('timestampInput').value;
+  if (tsValue && tsValue.length === 16) {
+    // Add seconds if missing
+    tsValue = tsValue + ':00';
+  }
+  const params = {
+    device_ip: selectedIP,
+    pin: document.getElementById('pinInput').value,
+    count: parseInt(document.getElementById('countInput').value),
+    verify_mode: parseInt(document.getElementById('verifyModeInput').value),
+    timestamp: tsValue,
+    status: parseInt(document.getElementById('statusInput').value),
+    no_reboot: document.getElementById('noRebootInput').checked,
+    dry_run: document.getElementById('dryRunInput').checked,
+  };
+
+  const el = document.getElementById('currentJob');
+  el.innerHTML = '<em>Dang gui request...</em>';
+
+  try {
+    const resp = await fetch('/api/inject/attlog', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(params),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      el.innerHTML = 'Error: ' + data.error;
+      return;
+    }
+    el.innerHTML = `<b>Job ID:</b> ${data.job_id}<br>Dang theo doi...`;
+    pollJob(data.job_id);
+  } catch (e) {
+    el.innerHTML = 'Error: ' + e.message;
+  }
+}
+
+async function pollJob(jobId) {
+  const el = document.getElementById('currentJob');
+  try {
+    const resp = await fetch('/api/inject/jobs/' + jobId);
+    const job = await resp.json();
+
+    let html = `
+      <div style="margin-bottom: 10px;">
+        <b>Job:</b> ${job.id} |
+        <span class="status-badge status-${job.status}">${job.status.toUpperCase()}</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: ${job.progress}%;"></div>
+      </div>
+      <div style="font-size: 13px; color: #4a5568; margin-bottom: 10px;">
+        ${job.progress}% - ${job.message}
+      </div>
+    `;
+
+    if (job.status === 'completed' || job.status === 'failed' || job.status === 'completed_with_warnings') {
+      html += `<button class="btn-secondary" onclick="loadHistory()">Refresh history</button>`;
+      el.innerHTML = html;
+      loadHistory();
+    } else {
+      el.innerHTML = html;
+      setTimeout(() => pollJob(jobId), 1000);
+    }
+  } catch (e) {
+    el.innerHTML = 'Error: ' + e.message;
+  }
+}
+
+async function loadHistory() {
+  const el = document.getElementById('historyList');
+  el.innerHTML = '<em>Dang tai...</em>';
+  try {
+    const resp = await fetch('/api/inject/history');
+    const data = await resp.json();
+    if (!data.history || data.history.length === 0) {
+      el.innerHTML = 'Chua co lich su';
+      return;
+    }
+    let html = '<table class="history-table"><tr><th>Thoi gian</th><th>IP</th><th>PIN</th><th>Count</th><th>Status</th><th>Message</th></tr>';
+    for (const h of data.history.slice(0, 50)) {
+      const cls = h.status === 'SUCCESS' ? 'log-success' :
+                  h.status === 'EXCEPTION' || h.status === 'UPLOAD_FAILED' ? 'log-error' : '';
+      html += `<tr>
+                 <td>${h.timestamp}</td>
+                 <td>${h.ip}</td>
+                 <td>${h.pin}</td>
+                 <td>${h.count}</td>
+                 <td class="${cls}">${h.status}</td>
+                 <td>${h.message}</td>
+               </tr>`;
+    }
+    html += '</table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = 'Error: ' + e.message;
+  }
+}
+
+loadDevices();
+loadHistory();
+</script>
+</body>
+</html>

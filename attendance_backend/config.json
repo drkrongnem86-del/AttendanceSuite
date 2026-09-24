@@ -1,0 +1,50 @@
+{
+    "auth": {
+        "enabled": true,
+        "user": "admin",
+        "pass": "bvdk2026"
+    },
+    "secutime": {
+        "host": "172.16.0.31",
+        "port": 80,
+        "user": "admin",
+        "pass": "admin@123"
+    },
+    "adms": {
+        "host": "172.16.200.105",
+        "port": 8080
+    },
+    "sync": {
+        "interval_seconds": 30,
+        "channels": {
+            "secutime": false,
+            "adms": true,
+            "direct_zk": true
+        }
+    },
+    "rate_limit": {
+        "max_requests": 10,
+        "window_seconds": 60,
+        "enabled": true
+    },
+    "csv_rotation": {
+        "max_size_mb": 10,
+        "keep_files": 30,
+        "enabled": true
+    },
+    "audit": {
+        "enabled": true,
+        "log_file": "audit.log",
+        "max_size_mb": 5
+    },
+    "server": {
+        "port": 8082,
+        "bind": "0.0.0.0"
+    },
+    "device_ips": [
+        "172.16.0.212",
+        "172.16.0.214",
+        "172.16.0.30",
+        "172.16.0.31"
+    ]
+}

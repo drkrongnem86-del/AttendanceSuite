@@ -1,0 +1,5 @@
+# Override parent .gitignore for releases/
+# Latest binaries should be tracked in git
+!*.apk
+!*.exe
+!*.zip

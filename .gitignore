@@ -1,2 +1,93 @@
+﻿# Flutter / Dart
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/.pub/
+**/build/
+**/android/.gradle/
+**/android/captures/
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.*
+**/android/key.properties
+**/android/app/release.keystore
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/.idea/
+**/*.iml
+**/*.iws
+**/pubspec.lock
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+ENV2/
+.python-version
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+
+# Android
 *.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs - ignore research logs
+*.log
+!docs/**/*.log
+
+# Throwaway research files (zk exploit scripts not part of product)
+zk_*.py
+zk_*.log
+zk_*.txt
+zk_*.pdf
+K-ZkTeco-*.md
+swagger_*.json
+mos_swagger.html
+!attendance_backend/zk/
+
+# Build outputs
+attendance-mobile-*.apk
+attendance-mobile-*.zip
+AttendanceSuite-*.exe
+AttendanceSuite-*.zip
+
+# Snapshots (already in git history)
+/*_v2.*.*.*
+/*_v2.*.*.*.*
+
+# Temp
+_fetch.log*
+_git_*.log
+_push*.log
+
+# Trash folders from IDE cleanup
+**/__trash_*/
+**/__pycache__/
+
