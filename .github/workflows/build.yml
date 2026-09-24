@@ -1,18 +1,25 @@
-# GitHub Actions: Build APK (arm64) + AAB + IPA + EXE + Auto-release
+# GitHub Actions: Build APK (arm64) + AAB + IPA + 2 EXE types + Auto-release
 #
 # AttendanceSuite - BVĐK Ninh Thuận (Dr. Nểm - Bác sĩ Cấp Cứu)
 # Repo: https://github.com/drkrongnem86-del/AttendanceSuite
 #
-# 4 JOBS song song:
-#   1. build-apk     - Android APK arm64 (Samsung A17 - direct install)
-#   2. build-aab     - Android AAB universal (Google Play Store)
-#   3. build-ipa     - iOS IPA (macOS runner - optional, skip nếu thiếu Apple certs)
-#   4. build-exe     - Windows EXE (PyInstaller onefile - BV PC silent installer)
+# 6 JOBS song song:
+#   1. build-apk            - Android APK arm64 (Samsung A17 - direct install)
+#   2. build-aab            - Android AAB universal (Google Play Store)
+#   3. build-ipa            - iOS IPA (macOS runner - optional, skip nếu thiếu Apple certs)
+#   4. build-exe-backend    - Backend EXE (PyInstaller onefile --noconsole, silent HTTP server)
+#   5. build-exe-launcher   - Launcher EXE (PyInstaller + spec, native pywebview window + tray)
+#
+# 2 loại EXE:
+#   - Backend EXE  (AttendanceSuite-v{VERSION}.exe): chi chay attendance_web.py, khong UI
+#     -> dung cho may BV silent install (server, kiosk, headless)
+#   - Launcher EXE (AttendanceSuite-v{VERSION}-Launcher.exe): mo native window voi pywebview
+#     -> dung cho may tram BS, BS muon click EXE -> cua so mo len voi cac tab
 #
 # Workflow:
-#   1. git tag v2.7.4
-#   2. git push origin v2.7.4
-#   3. Action tự động build 4 jobs → tạo GitHub Release với APK + AAB + IPA + EXE
+#   1. git tag v2.7.5
+#   2. git push origin v2.7.5
+#   3. Action tự động build 6 jobs → tạo GitHub Release với APK + AAB + IPA + 2 EXE
 #   4. Auto-update version.json cho in-app updater
 #
 # OPTIONAL - Add GitHub Secrets để sign với release keystore (matching cert SHA-1):
@@ -24,7 +31,7 @@
 #
 # Trigger: push tag v*.*.* HOẶC manual workflow_dispatch
 
-name: Build Release (APK + AAB + IPA + EXE)
+name: Build Release (APK + AAB + IPA + 2 EXE)
 
 on:
   push:
@@ -33,9 +40,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (vd: 2.7.4) - phải khớp pubspec.yaml'
+        description: 'Version (vd: 2.7.5) - phải khớp pubspec.yaml'
         required: true
-        default: '2.7.4'
+        default: '2.7.5'
 
 env:
   FLUTTER_VERSION: '3.41.7'
@@ -236,10 +243,11 @@ jobs:
           retention-days: 90
 
   # ============================================================
-  # JOB 4: WINDOWS - EXE (PyInstaller onefile - BV PC backend)
+  # JOB 4: WINDOWS - BACKEND EXE (silent HTTP server, headless)
+  # AttendanceSuite-v{VERSION}.exe
   # ============================================================
-  build-exe:
-    name: 🖥️ Build EXE (Windows - PyInstaller)
+  build-exe-backend:
+    name: 🖥️ Build Backend EXE (silent HTTP server)
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -258,36 +266,28 @@ jobs:
         working-directory: attendance_backend
         run: |
           python -m pip install --upgrade pip
-          # Install runtime deps + pyinstaller (skip pyinstaller nếu quá nặng)
           pip install -r requirements.txt
 
-      - name: 📋 Verify zk/ folder
-        working-directory: attendance_backend
-        run: |
-          if (Test-Path "zk") {
-            Write-Host "::notice::zk/ folder exists, will be bundled"
-            Get-ChildItem zk
-          } else {
-            Write-Host "::notice::zk/ folder missing - pyzk will be installed via pip"
-          }
-
-      - name: 🏗️ Build EXE (PyInstaller onefile)
+      - name: 🏗️ Build Backend EXE (PyInstaller onefile --noconsole)
         working-directory: attendance_backend
         run: |
           $VERSION = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME -replace '^v','' } else { 'dev' }
-          Write-Host "Building AttendanceSuite-v$VERSION.exe"
-          # PyInstaller onefile - noconsole = silent backend server
+          Write-Host "Building AttendanceSuite-v$VERSION.exe (Backend, silent)"
+          # Backend EXE: no console window (silent server)
           pyinstaller --noconfirm --onefile --noconsole `
             --name "AttendanceSuite-v$VERSION" `
             --add-data "templates;templates" `
             --add-data "devices.csv;." `
             --add-data "config.json;." `
+            --add-data "inject_routes.py;." `
+            --add-data "security_routes.py;." `
             --hidden-import=zk `
             --hidden-import=zk.base `
             --hidden-import=zk.const `
             --hidden-import=zk.attendance `
             --hidden-import=zk.user `
             --hidden-import=zk.finger `
+            --hidden-import=zk.exception `
             --hidden-import=openpyxl `
             --collect-all openpyxl `
             --collect-all zk `
@@ -296,7 +296,7 @@ jobs:
           Write-Host "::notice::Built dist/AttendanceSuite-v$VERSION.exe"
           Get-ChildItem dist
 
-      - name: 📤 Upload EXE artifact
+      - name: 📤 Upload Backend EXE artifact
         uses: actions/upload-artifact@v4
         with:
           name: attendance-backend-exe
@@ -305,12 +305,61 @@ jobs:
           retention-days: 90
 
   # ============================================================
-  # JOB 5: GITHUB RELEASE - tạo release tự động khi push tag
-  # Bao gồm: APK arm64 + AAB + IPA + EXE
+  # JOB 5: WINDOWS - LAUNCHER EXE (native pywebview window + tray)
+  # AttendanceSuite-v{VERSION}-Launcher.exe
+  # Entry: attendance_launcher.py (wraps attendance_web.py in-process)
+  # ============================================================
+  build-exe-launcher:
+    name: 🪟 Build Launcher EXE (native pywebview window)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        working-directory: attendance_backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🏗️ Build Launcher EXE (PyInstaller + spec file)
+        working-directory: attendance_backend
+        env:
+          ATTENDANCE_VERSION: ${{ github.ref_name }}
+        run: |
+          $VERSION = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME -replace '^v','' } else { 'dev' }
+          $env:ATTENDANCE_VERSION = $VERSION
+          Write-Host "Building AttendanceSuite-v$VERSION-Launcher.exe (Launcher, native pywebview)"
+          # Launcher EXE: console kept (user can see logs)
+          # Use spec file (handles hidden imports, datas, excludes)
+          pyinstaller --noconfirm --clean build_attendance_suite.spec
+          Write-Host "::notice::Built dist/AttendanceSuite-v$VERSION-Launcher.exe"
+          Get-ChildItem dist
+
+      - name: 📤 Upload Launcher EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: attendance-launcher-exe
+          path: attendance_backend/dist/AttendanceSuite-*-Launcher.exe
+          if-no-files-found: error
+          retention-days: 90
+
+  # ============================================================
+  # JOB 6: GITHUB RELEASE - tạo release tự động khi push tag
+  # Bao gồm: APK arm64 + AAB + IPA + Backend EXE + Launcher EXE
   # ============================================================
   create-release:
     name: 🚀 Create GitHub Release
-    needs: [build-apk, build-aab, build-exe]  # IPA optional (continue-on-error)
+    needs: [build-apk, build-aab, build-exe-backend, build-exe-launcher]  # IPA optional (continue-on-error)
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -346,7 +395,6 @@ jobs:
           if [ -f "artifacts/attendance-mobile-ipa/Runner.ipa" ]; then
             mv -v "artifacts/attendance-mobile-ipa/Runner.ipa" "artifacts/attendance-mobile-ipa/AttendanceSuite_v${VERSION}.ipa" || true
           fi
-          # EXE - already named with version
           ls -la artifacts/*/
 
       - name: 🚀 Create GitHub Release
@@ -360,7 +408,8 @@ jobs:
             ## AttendanceSuite ${{ github.ref_name }}
 
             **Backend v2.6.11** (Python + PyInstaller EXE)
-            **APK v2.7.4+47** (Flutter mobile)
+            **Launcher v2.0.13 style** (pywebview + threading, native window)
+            **APK v2.7.5+48** (Flutter mobile)
 
             ### Tính năng chính:
             - Đọc log chấm công từ 27 máy X628 PRO
@@ -373,10 +422,16 @@ jobs:
             - Manual ATTLOG entry (không cần máy thật)
             - Auto-detect backend với quick switch 3 URLs
 
-            ### Downloads:
+            ### Downloads (Windows):
+            - **AttendanceSuite-v${VERSION}.exe** — Backend (silent HTTP server, no UI window)
+              → Dùng cho máy BV chạy nền (kiosk, headless server, scheduled fetch)
+            - **AttendanceSuite-v${VERSION}-Launcher.exe** — Launcher (native window + tray)
+              → Dùng cho máy trạm BS: click EXE → cửa sổ pywebview mở ra với các tab
+              → Bao gồm cả Backend (attendance_web.py) chạy in-process
+
+            ### Downloads (Mobile):
             - **attendance-mobile-arm64** APK: cài đè lên bản cũ (cert SHA-1: `5d54b3cf...F6C5`)
             - **app-release.aab**: upload lên Google Play Store
-            - **AttendanceSuite-v2.6.11.exe**: silent installer cho PC BV
             - **AttendanceSuite_v*_arm64.apk**: APK đã rename
 
             ⚠️ Nếu APK build bị debug-signed (không có secrets), cần GỠ APP CŨ trước khi cài.
@@ -385,11 +440,12 @@ jobs:
             artifacts/attendance-mobile-aab/app-release.aab
             artifacts/attendance-mobile-ipa/AttendanceSuite_*.ipa
             artifacts/attendance-backend-exe/AttendanceSuite-*.exe
+            artifacts/attendance-launcher-exe/AttendanceSuite-*-Launcher.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ============================================================
-  # JOB 6: AUTO-UPDATE version.json
+  # JOB 7: AUTO-UPDATE version.json
   # File version.json được app đọc để check update in-app
   # ============================================================
   update-version-json:
@@ -416,8 +472,10 @@ jobs:
           echo "New version: $VERSION"
           APK_URL="https://github.com/${REPO}/releases/download/${TAG_NAME}/AttendanceSuite_v${VERSION}_arm64.apk"
           EXE_URL="https://github.com/${REPO}/releases/download/${TAG_NAME}/AttendanceSuite-v${VERSION}.exe"
+          LAUNCHER_URL="https://github.com/${REPO}/releases/download/${TAG_NAME}/AttendanceSuite-v${VERSION}-Launcher.exe"
           echo "APK URL: $APK_URL"
-          echo "EXE URL: $EXE_URL"
+          echo "Backend EXE URL: $EXE_URL"
+          echo "Launcher EXE URL: $LAUNCHER_URL"
           # Lấy message từ CHANGELOG.md (nếu có)
           if [ -f "CHANGELOG.md" ]; then
             MESSAGE=$(awk "/^## v$VERSION/{flag=1; next} /^## v/{flag=0} flag" CHANGELOG.md | head -3 | sed 's/^[[:space:]]*//' | tr '\n' ' ' | head -c 300)
@@ -431,6 +489,7 @@ jobs:
             "version": "$VERSION",
             "apk_url": "$APK_URL",
             "exe_url": "$EXE_URL",
+            "launcher_url": "$LAUNCHER_URL",
             "message": "$MESSAGE"
           }
           EOF

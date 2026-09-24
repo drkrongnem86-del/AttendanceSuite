@@ -1,7 +1,7 @@
 name: attendance_mobile
 description: "AttendanceSuite - BVĐK Ninh Thuan - Mobile attendance management with embedded Python web server (Chaquopy) + Flutter UI."
 publish_to: 'none'
-version: 2.7.4+47
+version: 2.7.5+48
 
 environment:
   sdk: ^3.5.4

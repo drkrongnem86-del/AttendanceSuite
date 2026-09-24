@@ -1,17 +1,28 @@
 # AttendanceSuite Backend v2.6.11 - Python dependencies
 # Dung de build EXE (PyInstaller) va chay local (python attendance_web.py)
+# Ho tro 2 loai EXE build:
+#   - Backend EXE: chi can pyzk + openpyxl (silent HTTP server, no UI)
+#   - Launcher EXE: them pywebview + pystray + pillow (native window + system tray)
 
-# ZK device library (pyzk) - cho port 4370
+# === Backend (v2.6.11 - Flask-style HTTP server via stdlib) ===
+# ZK device library (pyzk) - cho port 4370 (X628 PRO, ZK firmware)
 pyzk==0.9
-
-# HTTP server (stdlib nhung can cho type hints)
-# KHONG can flask/fastapi - code dung BaseHTTPRequestHandler stdlib
 
 # PDF/Excel export (su dung cho reports)
 openpyxl==3.1.2
 
+# === Launcher (v2.0.13 style - native pywebview window) ===
+# Native window wrapper (uses pythonnet + WebView2 on Windows)
+pywebview>=4.0
+# System tray icon support (optional, used by launcher when minimized)
+pystray>=0.19
+# Tray icon image
+Pillow>=10.0
+# pythonnet is a transitive dep of pywebview on Windows; pin to avoid surprise upgrades
+pythonnet>=3.0
+
+# === Build tooling ===
 # PyInstaller - chi can khi build EXE
 pyinstaller==6.3.0
 
-# Cys dependencies (already included in pyinstaller but explicit for clarity)
 # Note: chay tren Python 3.11+ (PyInstaller supports 3.7-3.13)

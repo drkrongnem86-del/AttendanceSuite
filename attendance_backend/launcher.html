@@ -1,0 +1,167 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AttendanceSuite v1.9.2 - BVĐK Ninh Thuận</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  min-height: 100vh;
+  color: #e0e0e0;
+}
+header {
+  background: #0f1729;
+  border-bottom: 1px solid #2a3a5a;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+header h1 { color: #00d4ff; font-size: 18px; }
+header .copyright { color: #888; font-size: 11px; width: 100%; margin-top: 4px; }
+header .conn { margin-left: auto; font-size: 13px; }
+.conn-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+.conn-badge.online { background: #1a4a1a; color: #5fff7f; border: 1px solid #2a6a2a; }
+.conn-badge.offline { background: #4a1a1a; color: #ff8888; border: 1px solid #6a2a2a; }
+.conn-badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+.conn-badge.online .dot { background: #5fff7f; }
+.conn-badge.offline .dot { background: #ff8888; }
+
+.tabs {
+  background: #0a1220;
+  display: flex;
+  border-bottom: 1px solid #2a3a5a;
+  overflow-x: auto;
+  flex-wrap: wrap;
+}
+.tab {
+  padding: 12px 24px;
+  cursor: pointer;
+  color: #888;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+  transition: all 0.15s;
+  user-select: none;
+  white-space: nowrap;
+}
+.tab:hover { color: #00d4ff; background: #1a2a3a; }
+.tab.active {
+  color: #00d4ff;
+  border-bottom-color: #00d4ff;
+  background: #1a2a3a;
+  font-weight: bold;
+}
+.tab .icon { margin-right: 6px; }
+
+iframe {
+  width: 100%;
+  height: calc(100vh - 100px);
+  border: none;
+  background: #16213e;
+}
+.open-new {
+  font-size: 11px;
+  margin-left: 8px;
+  padding: 2px 6px;
+  background: #2a3a5a;
+  color: #00d4ff;
+  text-decoration: none;
+  border-radius: 3px;
+}
+.open-new:hover { background: #3a4a6a; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏥 AttendanceSuite v1.9.2 - BVĐK Ninh Thuận</h1>
+  <span class="conn" id="connStatus">
+    <span class="conn-badge offline"><span class="dot"></span>Đang kiểm tra...</span>
+  </span>
+  <p class="copyright">Copyright (c) 2026 Dr. Nểm - Khoa Cấp cứu - BVĐK Ninh Thuận. All rights reserved.</p>
+</header>
+<div class="hint-banner" style="background:#fff3cd;color:#856404;padding:10px;border-radius:6px;margin:10px 0;border-left:4px solid #ffc107;font-size:13px;">
+  💡 <strong>Mẹo copy sang máy khác:</strong> Dùng file <code>Start-AttendanceSuite.bat</code> hoặc <code>Start-AttendanceSuite.ps1</code> (đừng click trực tiếp EXE). Đọc <code>README_HUONG_DAN.txt</code> để biết chi tiết.
+</div>
+<div class="tabs">
+  <div class="tab active" data-tab="viewer" onclick="switchTab('viewer')">
+    <span class="icon">📊</span>Đọc log chấm công
+    <a class="open-new" href="http://localhost:8080/" target="_blank" onclick="event.stopPropagation()">↗ mở tab mới</a>
+  </div>
+  <div class="tab" data-tab="simulator" onclick="switchTab('simulator')">
+    <span class="icon">🖥️</span>X628 PRO Simulator
+    <a class="open-new" href="http://localhost:8081/" target="_blank" onclick="event.stopPropagation()">↗ mở tab mới</a>
+  </div>
+  <div class="tab" data-tab="live" onclick="switchTab('live')">
+    <span class="icon">📡</span>Live Status
+    <a class="open-new" href="http://localhost:8080/api/live/page" target="_blank" onclick="event.stopPropagation()">↗ mở tab mới</a>
+  </div>
+  <div class="tab" data-tab="security" onclick="switchTab('security')">
+    <span class="icon">🔒</span>Bảo mật ⭐ v1.8
+    <a class="open-new" href="http://localhost:8080/security" target="_blank" onclick="event.stopPropagation()">↗ mở tab mới</a>
+  </div>
+  <div class="tab" data-tab="punch" onclick="switchTab('punch')">
+    <span class="icon">📱</span>Chấm công PIN+PWD ⭐ v1.8
+    <a class="open-new" href="http://localhost:8080/punch" target="_blank" onclick="event.stopPropagation()">↗ mở tab mới</a>
+  </div>
+  <div class="tab" data-tab="inject" onclick="switchTab('inject')">
+    <span class="icon">⚡</span>Inject ATTLOG 🔴 v1.9.2
+    <a class="open-new" href="http://localhost:8080/inject" target="_blank" onclick="event.stopPropagation()">↗ mở tab mới</a>
+  </div>
+  <div class="tab" data-tab="attlog-tools" onclick="switchTab('attlog-tools')">
+    <span class="icon">⚙️</span>ATTLOG Tools ⭐ v2.6.11
+    <a class="open-new" href="http://localhost:8080/attlog-tools" target="_blank" onclick="event.stopPropagation()">↗ mở tab mới</a>
+  </div>
+  <div class="tab" data-tab="all-links" onclick="switchTab('all-links')">
+    <span class="icon">📋</span>All Endpoints
+    <a class="open-new" href="http://localhost:8080/all-links" target="_blank" onclick="event.stopPropagation()">↗ mở tab mới</a>
+  </div>
+</div>
+<iframe id="frame" src="http://localhost:8080/"></iframe>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tab[data-tab="' + name + '"]').classList.add('active');
+  var url;
+  if (name === 'viewer') url = 'http://localhost:8080/';
+  else if (name === 'simulator') url = 'http://localhost:8081/';
+  else if (name === 'security') url = 'http://localhost:8080/security';
+  else if (name === 'punch') url = 'http://localhost:8080/punch';
+  else if (name === 'inject') url = 'http://localhost:8080/inject';
+  else if (name === 'attlog-tools') url = 'http://localhost:8080/attlog-tools';
+  else if (name === 'all-links') url = 'http://localhost:8080/all-links';
+  else url = 'http://localhost:8080/api/live/page';
+  document.getElementById('frame').src = url;
+}
+
+async function checkConn() {
+  try {
+    var r = await fetch('http://localhost:8080/api/status', {cache: 'no-store'});
+    var j = await r.json();
+    var el = document.getElementById('connStatus');
+    if (j && j.running !== undefined) {
+      el.innerHTML = '<span class="conn-badge online"><span class="dot"></span>Server OK - ' + (j.message || 'sẵn sàng') + '</span>';
+    } else {
+      el.innerHTML = '<span class="conn-badge online"><span class="dot"></span>Viewer online</span>';
+    }
+  } catch (e) {
+    document.getElementById('connStatus').innerHTML = '<span class="conn-badge offline"><span class="dot"></span>Server offline</span>';
+  }
+}
+checkConn();
+setInterval(checkConn, 10000);
+</script>
+</body>
+</html>
