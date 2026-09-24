@@ -1,6 +1,7 @@
 {
-  "version": "2.7.4",
-  "apk_url": "https://github.com/drkrongnem86-del/AttendanceSuite/releases/download/v2.7.4/AttendanceSuite_v2.7.4_arm64.apk",
-  "exe_url": "https://github.com/drkrongnem86-del/AttendanceSuite/releases/download/v2.7.4/AttendanceSuite-v2.7.4.exe",
-  "message": "Cập nhật phiên bản 2.7.4"
+  "version": "2.7.5",
+  "apk_url": "https://github.com/drkrongnem86-del/AttendanceSuite/releases/download/v2.7.5/AttendanceSuite_v2.7.5_arm64.apk",
+  "exe_url": "https://github.com/drkrongnem86-del/AttendanceSuite/releases/download/v2.7.5/AttendanceSuite-v2.7.5.exe",
+  "launcher_url": "https://github.com/drkrongnem86-del/AttendanceSuite/releases/download/v2.7.5/AttendanceSuite-v2.7.5-Launcher.exe",
+  "message": "- Backend: Thêm 2 loại EXE build trong GitHub Actions - Backend EXE (`AttendanceSuite-v{VERSION}.exe`): silent HTTP server (headless, kiosk, scheduled) - Launcher EXE (`AttendanceSuite-v{VERSION}-Launcher.exe`): v2.0.13 style với pywebview native window + threading "
 }
